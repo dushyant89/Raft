@@ -15,14 +15,15 @@ func TestCase(t *testing.T) {
 
 	cases:= []struct {
 		in, want string
+		noReply bool
 	} {
-		{"set dushyant 200 10 gulf-talent","OK 1001"},
-		{"set ravi 1 11 yodlee-tech","OK 1002"},
-		{"set rahul 100 9 db-phatak","OK 1003"},
-		{"delete raavi","ERRNOTFOUND"},
-		{"delete ravi","ERRNOTFOUND"},
-		{"cas dushyant 300 1001 4 MSCI","OK 1004"},
-		{"getm rahul","VALUE 1003 100 9 db-phatak"},
+		{"set dushyant 200 10 gulf-talent","OK 1001",false},
+		{"set ravi 1 11 yodlee-tech","OK 1002",false},
+		{"set rahul 100 9 noreply db-phatak","",true},
+		{"delete raavi","ERRNOTFOUND",false},
+		{"delete ravi","ERRNOTFOUND",false},
+		{"cas dushyant 300 1001 4 MSCI","OK 1004",false},
+		{"getm rahul","VALUE 1003 100 9 db-phatak",false},
 	}
 
 	for _, c := range cases {
@@ -35,27 +36,27 @@ func TestCase(t *testing.T) {
 		}
 	
 		defer conn.Close()
-	
-		conn.Write([]byte(c.in))
 		
-		got:=make([]byte,1024)
+		
+			conn.Write([]byte(c.in))
+			got:=make([]byte,1024)
+		  if(!c.noReply) {		
+			size,err:=conn.Read(got)
 
-		size,err:=conn.Read(got)
+			if(err!=nil) {
+				t.Errorf("Error Reading from the server",err.Error())
+			}
 
-		if(err!=nil) {
-			t.Errorf("Error Reading from the server",err.Error())
-		}
+			got=got[:size]
+			response:= string(got)
+			response=strings.TrimSpace(response)
 
-		got=got[:size]
+			if(c.want!=response) {
+				t.Errorf("Expected: %s Got:%s",c.want,string(got))
+			}
 
-		response:= string(got)
-		response=strings.TrimSpace(response)
-
-		if(c.want!=response) {
-			t.Errorf("Expected: %s Got:%s",c.want,string(got))
-		}
-
-		time.Sleep(1*time.Second)
+			time.Sleep(1*time.Second)
+		}	
 	}
 
 }
