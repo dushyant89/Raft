@@ -11,7 +11,7 @@ import (
 
 const (
     CONN_HOST = "localhost"
-    CONN_PORT = "6061"
+    CONN_PORT = "9000"
     CONN_TYPE = "tcp"
 )
 
@@ -195,7 +195,7 @@ func checkTimeStamp() {
         
         now:=time.Now()
         
-        if(now.After(value.lastLived)) {
+        if(now.After(value.lastLived) && value.exptime!=0) {
             mutex.Lock()  
               delete(store,key)
             mutex.Unlock()  
