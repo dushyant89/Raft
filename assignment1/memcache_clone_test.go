@@ -4,6 +4,7 @@ import (
 	"testing"
 	"net"
 	"strings"
+	"time"
 )
 
 func TestMain(t *testing.T) {
@@ -17,10 +18,11 @@ func TestCase(t *testing.T) {
 	} {
 		{"set dushyant 200 10 gulf-talent","OK 1001"},
 		{"set ravi 1 11 yodlee-tech","OK 1002"},
-		{"set rahul 1 9 db-phatak","OK 1003"},
+		{"set rahul 100 9 db-phatak","OK 1003"},
 		{"delete raavi","ERRNOTFOUND"},
 		{"delete ravi","ERRNOTFOUND"},
 		{"cas dushyant 300 1001 4 MSCI","OK 1004"},
+		{"getm rahul","VALUE 1003 100 9 db-phatak"},
 	}
 
 	for _, c := range cases {
@@ -52,6 +54,8 @@ func TestCase(t *testing.T) {
 		if(c.want!=response) {
 			t.Errorf("Expected: %s Got:%s",c.want,string(got))
 		}
+
+		time.Sleep(1*time.Second)
 	}
 
 }
