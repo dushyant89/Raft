@@ -10,7 +10,7 @@ All the basic functionalities including Get, Set, Getm, Cas & Delete are impleme
 <code>go get </code> github.com/dushyant89/cs733/assignment1
 
 Two files are supposed to be there <br/>
-1. Memcache_clone.go contains the code where all the commands are implemented and where server listens for the request
+1. Memcache_clone.go contains the code where all the commands are implemented and where server listens for the request <br/>
 2. Memcache_clone_test.go contains all the test cases including commands which are fired concurrently evaluating all the necessary scenarios
 
 To run the program only below command is needed (assuming the current directory is set to the assignment1 which has the go files)
