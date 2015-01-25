@@ -183,7 +183,9 @@ func deleteEntry(conn net.Conn,commands []string) {
   if(m_instance.version==0) {
       conn.Write([]byte("ERRNOTFOUND\r\n"))
     } else {
-        delete(store,key)
+        mutex.Lock()
+          delete(store,key)
+        mutex.Unlock()
         conn.Write([]byte("DELETED\r\n"))
     }
 }
