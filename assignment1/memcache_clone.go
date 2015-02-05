@@ -1,12 +1,12 @@
 package main
 
 import (
-    "fmt"
     "net"
     "strings"
     "strconv"
     "time"
     "sync"
+    "log"
 )
 
 const (
@@ -37,18 +37,18 @@ func main() {
    // Listen for incoming connections.
     l, err := net.Listen(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
     if err != nil {
-        fmt.Println("Error listening:", err.Error())
+        log.Print("Error listening:", err.Error())
     }
     // Close the listener when the application closes.
     defer l.Close()
     
-    fmt.Println("Listening on " + CONN_HOST + ":" + CONN_PORT)
+    log.Print("Listening on " + CONN_HOST + ":" + CONN_PORT)
 
     for {
         // Listen for an incoming connection.
         conn, err := l.Accept()
         if err != nil {
-            fmt.Println("Error accepting: ", err.Error())
+            log.Print("Error accepting: ", err.Error())
         }
 
         // Handle connections in a new goroutine.
@@ -175,19 +175,17 @@ func getm(conn net.Conn,commands []string){
 func deleteEntry(conn net.Conn,commands []string) {
   key:=strings.TrimSpace(commands[0])
   
-  mutex.RLock()  
+  mutex.Lock() 
     m_instance:=store[key]
-  mutex.RUnlock()
 
   //checking if the version is zero then that means there is no such value in the map
   if(m_instance.version==0) {
       conn.Write([]byte("ERRNOTFOUND\r\n"))
     } else {
-        mutex.Lock()
           delete(store,key)
-        mutex.Unlock()
-        conn.Write([]byte("DELETED\r\n"))
+          conn.Write([]byte("DELETED\r\n"))
     }
+  mutex.Unlock()
 }
 
 //checks for the entries in the map which are expired
@@ -208,46 +206,48 @@ func checkTimeStamp() {
 // Handles incoming requests.
 func handleRequest(conn net.Conn) {
 
-  // Make a buffer to hold incoming data.
-  buf := make([]byte, 1024)
+  // Close the connection when you're done with it.
+  defer conn.Close()
   
-  // Read the incoming connection into the buffer.
-  size, err := conn.Read(buf)
+  for {
+      // Make a buffer to hold incoming data.
+      buf := make([]byte, 1024)
+      // Read the incoming connection into the buffer.
+      size, err := conn.Read(buf)
+      conn.SetDeadline(time.Now().Add(3 * time.Second))
 
-  if err != nil {
-    fmt.Println("Error reading:", err.Error())
-  }
+      if err != nil {
+        log.Print("Error reading:", err.Error())
+      }
 
-  buf= buf[:size]
+      buf= buf[:size]
 
-  commands := string(buf)
-  commands = strings.TrimSpace(commands)
-  arrayOfCommands := strings.Split(commands," ")
+      commands := string(buf)
+      commands = strings.TrimSpace(commands)
+      arrayOfCommands := strings.Fields(commands)
 
-  checkTimeStamp()
+      checkTimeStamp()
 
-  //the first element of the array will always be the command name
-  var noReply bool= false
-  
-  if(arrayOfCommands[0]=="set") {
-        set(conn,arrayOfCommands[1:],&noReply)
+      //the first element of the array will always be the command name
+      var noReply bool= false
+      
+      if(arrayOfCommands[0]=="set") {
+            set(conn,arrayOfCommands[1:],&noReply)
 
-    } else if(arrayOfCommands[0]=="cas") {
-        cas(conn,arrayOfCommands[1:],&noReply)
+        } else if(arrayOfCommands[0]=="cas") {
+            cas(conn,arrayOfCommands[1:],&noReply)
 
-    } else if(arrayOfCommands[0]=="get") {
-        get(conn,arrayOfCommands[1:])
+        } else if(arrayOfCommands[0]=="get") {
+            get(conn,arrayOfCommands[1:])
 
-    } else if(arrayOfCommands[0]=="getm") {
-        getm(conn,arrayOfCommands[1:]) 
+        } else if(arrayOfCommands[0]=="getm") {
+            getm(conn,arrayOfCommands[1:]) 
 
-    } else if(arrayOfCommands[0]=="delete") {
-        deleteEntry(conn,arrayOfCommands[1:]) 
+        } else if(arrayOfCommands[0]=="delete") {
+            deleteEntry(conn,arrayOfCommands[1:]) 
 
-    } else {
-        conn.Write([]byte("ERRCMDERR\r\n"))
+        } else {
+            conn.Write([]byte("ERRCMDERR\r\n"))
+        }
     }
-    
-    // Close the connection when you're done with it.
-    conn.Close()
 }
