@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 	"net"
-	"strings"
+	//"strings"
 	"time"
 )
 
@@ -51,6 +51,7 @@ func shootTestCase(t *testing.T, routineID int, testcases []TestCase) {
 	for _, c := range testcases {
 		
 		conn.Write([]byte(c.in))
+
 		got:=make([]byte,1024)
 	    
 	    if(!c.noReply) {		
@@ -63,7 +64,7 @@ func shootTestCase(t *testing.T, routineID int, testcases []TestCase) {
 
 		got=got[:size]
 		response:= string(got)
-		response=strings.TrimSpace(response)
+		//response=strings.TrimSpace(response)
 
 		if(c.want!=response) {
 			t.Errorf("Expected: %s Got:%s for routine: %d",c.want,string(got),routineID)
@@ -78,17 +79,16 @@ func shootTestCase(t *testing.T, routineID int, testcases []TestCase) {
 
 func TestCase1(t *testing.T) {
 
-	n:=2
+	n:=1
 
 	var testcases = []TestCase {
-		{"set dushyant 200 10 gulf-talent","OK 1001",false},
-		/*{"set ravi 1 11 yodlee-tech","OK 1002",false},
-		{"set rahul 100 9 noreply db-phatak","",true},
-		{"delete raavi","ERRNOTFOUND",false},
-		{"delete ravi","ERRNOTFOUND",false},
-		{"cas dushyant 300 1001 4 MSCI","OK 1004",false},
-		{"getm rahul","VALUE 1003 100 9 db-phatak",false},*/
+		{"set dushyant 200 10\r\ngulf-talent\r\n","OK 1001\r\n",false},
+		{"set ravi 1 11\r\nyodlee-tech\r\n","OK 1002\r\n",false},
+		{"set rahul 100 9 noreply\r\ndb-phatak\r\n","",true},
+		{"delete raavi\r\n","ERRNOTFOUND\r\n",false},
+		{"delete ravi\r\n","ERRNOTFOUND\r\n",false},
+		{"cas dushyant 300 1001 4\r\nMSCI\r\n","OK 1004\r\n",false},
+		{"getm rahul\r\n","VALUE 1003 100 9 db-phatak\r\n",false},
 	}
-
 	fireTestCases(t,n,testcases)
 }

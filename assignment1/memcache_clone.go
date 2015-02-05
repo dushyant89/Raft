@@ -53,7 +53,6 @@ func main() {
 
         // Handle connections in a new goroutine.
         go handleRequest(conn)
-
     }
 }
 
@@ -214,8 +213,7 @@ func handleRequest(conn net.Conn) {
       buf := make([]byte, 1024)
       // Read the incoming connection into the buffer.
       size, err := conn.Read(buf)
-      conn.SetDeadline(time.Now().Add(3 * time.Second))
-
+      
       if err != nil {
         log.Print("Error reading:", err.Error())
       }
@@ -224,7 +222,20 @@ func handleRequest(conn net.Conn) {
 
       commands := string(buf)
       commands = strings.TrimSpace(commands)
-      arrayOfCommands := strings.Fields(commands)
+      lineSeparator := strings.Split(commands,"\r\n")
+
+      //separate the command and the following value if there is any
+      arrayOfCommands:= strings.Fields(lineSeparator[0])
+      var newArrayOfCommands[] string
+      //that means the case where there is a value, append to the array of commands
+      if len(lineSeparator) >1 {
+          newArrayOfCommands = make([] string,len(arrayOfCommands),len(arrayOfCommands)+1)
+          copy(newArrayOfCommands,arrayOfCommands)
+          newArrayOfCommands=append(newArrayOfCommands,lineSeparator[1])
+      } else {
+          newArrayOfCommands= make([] string,len(arrayOfCommands))
+          copy(newArrayOfCommands,arrayOfCommands)
+      }   
 
       checkTimeStamp()
 
@@ -232,19 +243,19 @@ func handleRequest(conn net.Conn) {
       var noReply bool= false
       
       if(arrayOfCommands[0]=="set") {
-            set(conn,arrayOfCommands[1:],&noReply)
+            set(conn,newArrayOfCommands[1:],&noReply)
 
         } else if(arrayOfCommands[0]=="cas") {
-            cas(conn,arrayOfCommands[1:],&noReply)
+            cas(conn,newArrayOfCommands[1:],&noReply)
 
         } else if(arrayOfCommands[0]=="get") {
-            get(conn,arrayOfCommands[1:])
+            get(conn,newArrayOfCommands[1:])
 
         } else if(arrayOfCommands[0]=="getm") {
-            getm(conn,arrayOfCommands[1:]) 
+            getm(conn,newArrayOfCommands[1:]) 
 
         } else if(arrayOfCommands[0]=="delete") {
-            deleteEntry(conn,arrayOfCommands[1:]) 
+            deleteEntry(conn,newArrayOfCommands[1:]) 
 
         } else {
             conn.Write([]byte("ERRCMDERR\r\n"))
