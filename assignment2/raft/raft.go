@@ -26,7 +26,7 @@ type SharedLog interface {
 // --------------------------------------
 
 //structure for log entry
-type logEntity struct {
+type LogEntity struct {
 	lsn Lsn
 	data []byte
 	committed bool
@@ -50,7 +50,14 @@ type ClusterConfig struct {
 	// .... fill
 	clusterConfig ClusterConfig
 	commitCh chan LogEntry
-	leaderID int
+	serverId int
+	//array of log entries maintained by each server
+	log []LogEntity
+}
+
+//Getter for the id of the server with the current raft object
+func (raft Raft) ServerId() int {
+	return raft.serverId
 }
 
 // Creates a raft object. This implements the SharedLog interface.
@@ -60,11 +67,9 @@ type ClusterConfig struct {
 func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry) (*Raft, error) {
 	
 	var raft Raft
-	
-	raft.leaderID=thisServerId
 	raft.clusterConfig=*config
 	raft.commitCh=commitCh
-
+	raft.serverId=thisServerId
 	return &raft, nil
 }
 

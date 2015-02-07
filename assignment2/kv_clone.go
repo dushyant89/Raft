@@ -36,7 +36,7 @@ type Memcache struct {
  //defining the mutex to be used for RW operation
  var mutex = &sync.RWMutex{}
 
- var main_raft *raft.Raft
+ var leaderId int = 0
 
 func main() {
 
@@ -54,10 +54,8 @@ func main() {
 
     servers:= cc.Servers     //array containing the details of the servers to start at different ports
 
-    main_raft,_=raft.NewRaft(&cc,0,make(chan raft.LogEntry))
-
     for _, value := range servers {
-        go spawnServers(value)
+        go spawnServers(cc,value)
     }
 
     for {
@@ -66,7 +64,7 @@ func main() {
     }
 }
 
-func spawnServers(sc raft.ServerConfig) {
+func spawnServers(cc raft.ClusterConfig,sc raft.ServerConfig) {
 
     // Listen for incoming connections.
     l, err := net.Listen(CONN_TYPE,sc.Host+":"+strconv.Itoa(sc.ClientPort))
@@ -85,8 +83,9 @@ func spawnServers(sc raft.ServerConfig) {
             log.Print("Error accepting: ", err.Error())
         }
 
+         raft_obj,_:=raft.NewRaft(&cc,sc.Id,make(chan raft.LogEntry))
         // Handle connections in a new goroutine.
-        go handleRequest(conn,sc.Id)
+        go handleRequest(conn,raft_obj)
       }
 }
 
@@ -237,7 +236,7 @@ func checkTimeStamp() {
 }
 
 // Handles incoming requests.
-func handleRequest(conn net.Conn, serverId int) {
+func handleRequest(conn net.Conn, raft_obj *raft.Raft) {
 
   // Close the connection when you're done with it.
   defer conn.Close()
@@ -255,7 +254,7 @@ func handleRequest(conn net.Conn, serverId int) {
       buf= buf[:size]
 
       //if the go routine is acting as the leader
-      if serverId == main_raft.leaderID {
+      if leaderId == raft_obj.ServerId() {
 
             commands := string(buf)
             commands = strings.TrimSpace(commands)
@@ -297,6 +296,8 @@ func handleRequest(conn net.Conn, serverId int) {
               } else {
                   conn.Write([]byte("ERRCMDERR\r\n"))
               }
+          } else {
+
           }
         }  
 }
