@@ -10,9 +10,9 @@ import (
     "github.com/_dushyant/cs733/assignment2/raft"
     "encoding/json"
     "io/ioutil"
-    "fmt"
 )
 
+//details of the leader hardcoded for time being
 const (
     CONN_HOST = "localhost"
     CONN_PORT = "9000"
@@ -36,7 +36,7 @@ type Memcache struct {
  //defining the mutex to be used for RW operation
  var mutex = &sync.RWMutex{}
 
- var raft *raft.raft
+ var main_raft *raft.Raft
 
 func main() {
 
@@ -54,28 +54,29 @@ func main() {
 
     servers:= cc.Servers     //array containing the details of the servers to start at different ports
 
-    for key, value := range servers {
+    main_raft,_=raft.NewRaft(&cc,0,make(chan raft.LogEntry))
+
+    for _, value := range servers {
         go spawnServers(value)
     }
 
-
-
     for {
-        // Just an empty infinite for loop to hold everything
+          //weird way of holding the main function, will change once a better solution is found
+          time.Sleep(1*time.Hour)
     }
 }
 
 func spawnServers(sc raft.ServerConfig) {
 
     // Listen for incoming connections.
-    l, err := net.Listen(CONN_TYPE, sc.Host+":"+sc.ClientPort)
+    l, err := net.Listen(CONN_TYPE,sc.Host+":"+strconv.Itoa(sc.ClientPort))
     if err != nil {
         log.Print("Error listening:", err.Error())
     }
     // Close the listener when the application closes.
     defer l.Close()
     
-    log.Print("Listening on " + sc.Host+":"+sc.ClientPort)
+    //fmt.Println("Listening on " + sc.Host+":"+strconv.Itoa(sc.ClientPort))
 
     for {
         // Listen for an incoming connection.
@@ -85,7 +86,7 @@ func spawnServers(sc raft.ServerConfig) {
         }
 
         // Handle connections in a new goroutine.
-        go handleRequest(conn)
+        go handleRequest(conn,sc.Id)
       }
 }
 
@@ -236,7 +237,7 @@ func checkTimeStamp() {
 }
 
 // Handles incoming requests.
-func handleRequest(conn net.Conn) {
+func handleRequest(conn net.Conn, serverId int) {
 
   // Close the connection when you're done with it.
   defer conn.Close()
@@ -253,45 +254,49 @@ func handleRequest(conn net.Conn) {
 
       buf= buf[:size]
 
-      commands := string(buf)
-      commands = strings.TrimSpace(commands)
-      lineSeparator := strings.Split(commands,"\r\n")
+      //if the go routine is acting as the leader
+      if serverId == main_raft.leaderID {
 
-      //separate the command and the following value if there is any
-      arrayOfCommands:= strings.Fields(lineSeparator[0])
-      var newArrayOfCommands[] string
-      //that means the case where there is a value, append to the array of commands
-      if len(lineSeparator) >1 {
-          newArrayOfCommands = make([] string,len(arrayOfCommands),len(arrayOfCommands)+1)
-          copy(newArrayOfCommands,arrayOfCommands)
-          newArrayOfCommands=append(newArrayOfCommands,lineSeparator[1])
-      } else {
-          newArrayOfCommands= make([] string,len(arrayOfCommands))
-          copy(newArrayOfCommands,arrayOfCommands)
-      }   
+            commands := string(buf)
+            commands = strings.TrimSpace(commands)
+            lineSeparator := strings.Split(commands,"\r\n")
 
-      checkTimeStamp()
+            //separate the command and the following value if there is any
+            arrayOfCommands:= strings.Fields(lineSeparator[0])
+            var newArrayOfCommands[] string
+            //that means the case where there is a value, append to the array of commands
+            if len(lineSeparator) >1 {
+                newArrayOfCommands = make([] string,len(arrayOfCommands),len(arrayOfCommands)+1)
+                copy(newArrayOfCommands,arrayOfCommands)
+                newArrayOfCommands=append(newArrayOfCommands,lineSeparator[1])
+            } else {
+                newArrayOfCommands= make([] string,len(arrayOfCommands))
+                copy(newArrayOfCommands,arrayOfCommands)
+            }   
 
-      //the first element of the array will always be the command name
-      var noReply bool= false
-      
-      if(arrayOfCommands[0]=="set") {
-            set(conn,newArrayOfCommands[1:],&noReply)
+            checkTimeStamp()
 
-        } else if(arrayOfCommands[0]=="cas") {
-            cas(conn,newArrayOfCommands[1:],&noReply)
+            //the first element of the array will always be the command name
+            var noReply bool= false
+            
+            if(arrayOfCommands[0]=="set") {
+                  set(conn,newArrayOfCommands[1:],&noReply)
 
-        } else if(arrayOfCommands[0]=="get") {
-            get(conn,newArrayOfCommands[1:])
+              } else if(arrayOfCommands[0]=="cas") {
+                  cas(conn,newArrayOfCommands[1:],&noReply)
 
-        } else if(arrayOfCommands[0]=="getm") {
-            getm(conn,newArrayOfCommands[1:]) 
+              } else if(arrayOfCommands[0]=="get") {
+                  get(conn,newArrayOfCommands[1:])
 
-        } else if(arrayOfCommands[0]=="delete") {
-            deleteEntry(conn,newArrayOfCommands[1:]) 
+              } else if(arrayOfCommands[0]=="getm") {
+                  getm(conn,newArrayOfCommands[1:]) 
 
-        } else {
-            conn.Write([]byte("ERRCMDERR\r\n"))
-        }
-    }
+              } else if(arrayOfCommands[0]=="delete") {
+                  deleteEntry(conn,newArrayOfCommands[1:]) 
+
+              } else {
+                  conn.Write([]byte("ERRCMDERR\r\n"))
+              }
+          }
+        }  
 }

@@ -49,6 +49,7 @@ type ClusterConfig struct {
  type Raft struct {
 	// .... fill
 	clusterConfig ClusterConfig
+	commitCh chan LogEntry
 	leaderID int
 }
 
@@ -59,8 +60,10 @@ type ClusterConfig struct {
 func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry) (*Raft, error) {
 	
 	var raft Raft
+	
 	raft.leaderID=thisServerId
-	raft.clusterConfig=config
+	raft.clusterConfig=*config
+	raft.commitCh=commitCh
 
 	return &raft, nil
 }

@@ -69,8 +69,7 @@ func shootTestCase(t *testing.T, routineID int, testcases []TestCase) {
 		if(c.want!=response) {
 			t.Errorf("Expected: %s Got:%s for routine: %d",c.want,string(got),routineID)
 		}
-
-			time.Sleep(1*time.Second)
+		
 		}	
 	}
 
@@ -83,12 +82,12 @@ func TestCase1(t *testing.T) {
 
 	var testcases = []TestCase {
 		{"set dushyant 200 10\r\ngulf-talent\r\n","OK 1001\r\n",false},
-		{"set ravi 1 11\r\nyodlee-tech\r\n","OK 1002\r\n",false},
+		/*{"set ravi 1 11\r\nyodlee-tech\r\n","OK 1002\r\n",false},
 		{"set rahul 100 9 noreply\r\ndb-phatak\r\n","",true},
 		{"delete raavi\r\n","ERRNOTFOUND\r\n",false},
 		{"delete ravi\r\n","ERRNOTFOUND\r\n",false},
 		{"cas dushyant 300 1001 4\r\nMSCI\r\n","OK 1004\r\n",false},
-		{"getm rahul\r\n","VALUE 1003 100 9 db-phatak\r\n",false},
+		{"getm rahul\r\n","VALUE 1003 100 9 db-phatak\r\n",false},*/
 	}
 	fireTestCases(t,n,testcases)
 }
