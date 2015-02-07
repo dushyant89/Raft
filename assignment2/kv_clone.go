@@ -7,6 +7,10 @@ import (
     "time"
     "sync"
     "log"
+    "github.com/_dushyant/cs733/assignment2/raft"
+    "encoding/json"
+    "io/ioutil"
+    "fmt"
 )
 
 const (
@@ -32,17 +36,46 @@ type Memcache struct {
  //defining the mutex to be used for RW operation
  var mutex = &sync.RWMutex{}
 
+ var raft *raft.raft
+
 func main() {
 
-   // Listen for incoming connections.
-    l, err := net.Listen(CONN_TYPE, CONN_HOST+":"+CONN_PORT)
+    var cc raft.ClusterConfig
+
+    //reading the file and parsing the json data
+    file, err := ioutil.ReadFile("c:/Go/src/github.com/_dushyant/cs733/assignment2/server.json")
+    if err != nil {
+        log.Fatal(err)
+    }
+    err = json.Unmarshal(file, &cc)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    servers:= cc.Servers     //array containing the details of the servers to start at different ports
+
+    for key, value := range servers {
+        go spawnServers(value)
+    }
+
+
+
+    for {
+        // Just an empty infinite for loop to hold everything
+    }
+}
+
+func spawnServers(sc raft.ServerConfig) {
+
+    // Listen for incoming connections.
+    l, err := net.Listen(CONN_TYPE, sc.Host+":"+sc.ClientPort)
     if err != nil {
         log.Print("Error listening:", err.Error())
     }
     // Close the listener when the application closes.
     defer l.Close()
     
-    log.Print("Listening on " + CONN_HOST + ":" + CONN_PORT)
+    log.Print("Listening on " + sc.Host+":"+sc.ClientPort)
 
     for {
         // Listen for an incoming connection.
@@ -53,7 +86,7 @@ func main() {
 
         // Handle connections in a new goroutine.
         go handleRequest(conn)
-    }
+      }
 }
 
 //sets the new key in the map

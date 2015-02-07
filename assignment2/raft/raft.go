@@ -1,5 +1,8 @@
 package raft
 
+import(
+"strconv"
+)
 
 type Lsn uint64 //Log sequence number, unique for all time.
 
@@ -21,10 +24,18 @@ type SharedLog interface {
 }
 
 // --------------------------------------
+
+//structure for log entry
+type logEntity struct {
+	lsn Lsn
+	data []byte
+	committed bool
+}
+
 // Raft setup
 type ServerConfig struct {
 	Id int // Id of server. Must be unique
-	Hostname string // name or ip of host
+	Host string // name or ip of host
 	ClientPort int // port at which server listens to client messages.
 	LogPort int // tcp port for inter-replica protocol messages.
 }
@@ -35,8 +46,10 @@ type ClusterConfig struct {
 }
 
 // Raft implements the SharedLog interface.
-	type Raft struct {
+ type Raft struct {
 	// .... fill
+	clusterConfig ClusterConfig
+	leaderID int
 }
 
 // Creates a raft object. This implements the SharedLog interface.
@@ -44,7 +57,12 @@ type ClusterConfig struct {
 // When the process starts, the local disk log is read and all committed
 // entries are recovered and replayed
 func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry) (*Raft, error) {
-	return nil, nil
+	
+	var raft Raft
+	raft.leaderID=thisServerId
+	raft.clusterConfig=config
+
+	return &raft, nil
 }
 
 // ErrRedirect as an Error object
