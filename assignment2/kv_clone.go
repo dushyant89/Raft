@@ -36,6 +36,7 @@ type Memcache struct {
  //defining the mutex to be used for RW operation
  var mutex = &sync.RWMutex{}
 
+//for starters by default making the server with id=0 as the leader
  var leaderId int = 0
 
 func main() {
@@ -67,7 +68,16 @@ func main() {
 func spawnServers(cc raft.ClusterConfig,sc raft.ServerConfig) {
 
     // Listen for incoming connections.
-    l, err := net.Listen(CONN_TYPE,sc.Host+":"+strconv.Itoa(sc.ClientPort))
+    var port string
+
+    if sc.Id == leaderId {  //if leader then start the client port else log port
+        port=strconv.Itoa(sc.ClientPort)
+    } else {
+          port=strconv.Itoa(sc.LogPort)
+    }
+
+    l, err:= net.Listen(CONN_TYPE,sc.Host+":"+port)
+
     if err != nil {
         log.Print("Error listening:", err.Error())
     }
