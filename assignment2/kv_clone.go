@@ -74,7 +74,7 @@ func spawnServers(cc raft.ClusterConfig,sc raft.ServerConfig) {
     // Close the listener when the application closes.
     defer l.Close()
     
-    //fmt.Println("Listening on " + sc.Host+":"+strconv.Itoa(sc.ClientPort))
+    raft_obj,_:=raft.NewRaft(&cc,sc.Id,make(chan raft.LogEntry))
 
     for {
         // Listen for an incoming connection.
@@ -82,8 +82,6 @@ func spawnServers(cc raft.ClusterConfig,sc raft.ServerConfig) {
         if err != nil {
             log.Print("Error accepting: ", err.Error())
         }
-
-         raft_obj,_:=raft.NewRaft(&cc,sc.Id,make(chan raft.LogEntry))
         // Handle connections in a new goroutine.
         go handleRequest(conn,raft_obj)
       }
