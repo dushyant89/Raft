@@ -2,7 +2,7 @@ package main
 
 import (
     "net"
-    "net/rpc"
+    //"net/rpc"
     "strings"
     "strconv"
     "time"
@@ -11,6 +11,8 @@ import (
     "github.com/_dushyant/cs733/assignment2/raft"
     "encoding/json"
     "io/ioutil"
+    "os"
+    "fmt"
 )
 
 //details of the leader hardcoded for time being
@@ -42,6 +44,11 @@ type Memcache struct {
 
 func main() {
 
+    //fetching the serverId from the command line args
+    serverId, err := strconv.Atoi(os.Args[1])
+
+    fmt.Println(serverId)
+
     var cc raft.ClusterConfig
 
     //reading the file and parsing the json data
@@ -57,7 +64,9 @@ func main() {
     servers:= cc.Servers     //array containing the details of the servers to start at different ports
 
     for _, value := range servers {
-        go spawnServers(cc,value)
+      if(value.Id==serverId)  {   
+            go spawnServers(cc,value)
+         } 
     }
 
     for {
@@ -78,6 +87,8 @@ func spawnServers(cc raft.ClusterConfig,sc raft.ServerConfig) {
     }
 
     l, err:= net.Listen(CONN_TYPE,sc.Host+":"+port)
+
+    fmt.Println("Listening for:"+sc.Host+":"+port)
 
     if err != nil {
         log.Print("Error listening:", err.Error())
@@ -269,7 +280,7 @@ func handleRequest(conn net.Conn, raft_obj *raft.Raft) {
             go raft_obj.Append(buf)
 
             //waiting for the commit channel to send a value
-            <- raft_obj.commitCh
+           // <- raft_obj.commitCh
 
             commands := string(buf)
             commands = strings.TrimSpace(commands)
@@ -314,7 +325,7 @@ func handleRequest(conn net.Conn, raft_obj *raft.Raft) {
           } else {
                   //case where server acts as the follower
 
-                type tmp struct{}
+               /* type tmp struct{}
 
                  func (t *tmp) accept(logentry *raft.LogEntity, reply *bool) error {
                       //adding the log entry to followers log
@@ -325,7 +336,7 @@ func handleRequest(conn net.Conn, raft_obj *raft.Raft) {
                   cal := new(tmp)
                   rpc.Register(cal)
 
-                  go rpc.ServeConn(conn)
+                  go rpc.ServeConn(conn)*/
             }  
       }
 }
