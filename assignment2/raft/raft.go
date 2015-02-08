@@ -1,10 +1,14 @@
 package raft
 
 import(
-"strconv"
+	"strconv"
+	"log"
+	"net/rpc"
 )
 
 type Lsn uint64 //Log sequence number, unique for all time.
+
+var unique_lsn Lsn = 1000
 
 type ErrRedirect int // See Log.Append. Implements Error interface.
 
@@ -32,6 +36,19 @@ type LogEntity struct {
 	committed bool
 }
 
+//LogEntity implements the LogEntry interface
+func (le LogEntity) Lsn() Lsn {
+	return le.lsn
+}
+
+func (le LogEntity) Data() []byte {
+	return le.data
+}
+
+func (le LogEntity) Committed() bool {
+	return le.committed
+}
+
 // Raft setup
 type ServerConfig struct {
 	Id int // Id of server. Must be unique
@@ -53,6 +70,63 @@ type ClusterConfig struct {
 	serverId int
 	//array of log entries maintained by each server
 	log []LogEntity
+}
+
+var ackCount chan int
+
+func sendRpc(value ServerConfig,logEntity LogEntity) {
+//not to send the append entries rpc to the leader itself 
+		
+	client, err := rpc.Dial("tcp", value.Host+":"+strconv.Itoa(value.LogPort))
+	 
+	 if err != nil {
+		log.Print("Error Dialing :", err)
+	 }
+	 // Synchronous call
+	args := &logEntity
+	
+	//this reply is the ack from the followers receiving the append entries
+	var reply bool
+	err = client.Call("tmp.acceptLogEntry", args, &reply) 
+
+	if err != nil {
+		log.Print("Remote Method Invocation Error:", err)
+	}
+	replyCount:=0
+
+	if(reply) {
+		replyCount++
+		ackCount <- replyCount
+	}
+}
+
+//raft implementing the shared log interface
+func (raft *Raft) Append(data []byte) (LogEntry,error) {
+	
+	ackCount=make(chan int)
+	
+	logEntity:= LogEntity{
+					unique_lsn,
+					data,
+					false,
+					}
+	
+	raft.log=append(raft.log,logEntity)
+
+	cc := raft.clusterConfig
+
+	for _,value := range cc.Servers {
+		if(value.Id != raft.serverId) {
+			go sendRpc(value,logEntity)
+			<- ackCount
+		}
+	}
+	unique_lsn++
+
+	//the majority acks have been received
+	raft.commitCh <- logEntity
+
+	return logEntity,nil
 }
 
 //Getter for the id of the server with the current raft object

@@ -2,6 +2,7 @@ package main
 
 import (
     "net"
+    "net/rpc"
     "strings"
     "strconv"
     "time"
@@ -73,7 +74,7 @@ func spawnServers(cc raft.ClusterConfig,sc raft.ServerConfig) {
     if sc.Id == leaderId {  //if leader then start the client port else log port
         port=strconv.Itoa(sc.ClientPort)
     } else {
-          port=strconv.Itoa(sc.LogPort)
+        port=strconv.Itoa(sc.LogPort)
     }
 
     l, err:= net.Listen(CONN_TYPE,sc.Host+":"+port)
@@ -264,6 +265,12 @@ func handleRequest(conn net.Conn, raft_obj *raft.Raft) {
       //if the go routine is acting as the leader
       if leaderId == raft_obj.ServerId() {
 
+            //calling the append function for sending the append entries rpc
+            go raft_obj.Append(buf)
+
+            //waiting for the commit channel to send a value
+            <- raft_obj.commitCh
+
             commands := string(buf)
             commands = strings.TrimSpace(commands)
             lineSeparator := strings.Split(commands,"\r\n")
@@ -305,7 +312,20 @@ func handleRequest(conn net.Conn, raft_obj *raft.Raft) {
                   conn.Write([]byte("ERRCMDERR\r\n"))
               }
           } else {
+                  //case where server acts as the follower
 
-          }
-        }  
+                type tmp struct{}
+
+                 func (t *tmp) accept(logentry *raft.LogEntity, reply *bool) error {
+                      //adding the log entry to followers log
+                      raft_obj.log = append(raft_obj.log,*logentry)
+                      *reply = true
+                      return nil
+                  }
+                  cal := new(tmp)
+                  rpc.Register(cal)
+
+                  go rpc.ServeConn(conn)
+            }  
+      }
 }
