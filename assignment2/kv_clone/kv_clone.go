@@ -2,7 +2,7 @@ package main
 
 import (
     "net"
-    //"net/rpc"
+    "net/rpc"
     "strings"
     "strconv"
     "time"
@@ -41,6 +41,19 @@ type Memcache struct {
 
 //for starters by default making the server with id=0 as the leader
  var leaderId int = 0
+
+ //global raft object for every server process
+ var raft_obj *raft.Raft
+
+ //temporary struct to make the rpc call to work, offcourse will think of something useful
+ type tmp struct{}
+
+ func (t *tmp) accept(logentry *raft.LogEntity, reply *bool) error {
+      //adding the log entry to followers log
+      raft_obj.Log = append(raft_obj.Log,*logentry)
+      *reply = true
+      return nil
+  }
 
 func main() {
 
@@ -96,7 +109,7 @@ func spawnServers(cc raft.ClusterConfig,sc raft.ServerConfig) {
     // Close the listener when the application closes.
     defer l.Close()
     
-    raft_obj,_:=raft.NewRaft(&cc,sc.Id,make(chan raft.LogEntry))
+    raft_obj,_=raft.NewRaft(&cc,sc.Id,make(chan raft.LogEntity))
 
     for {
         // Listen for an incoming connection.
@@ -274,13 +287,13 @@ func handleRequest(conn net.Conn, raft_obj *raft.Raft) {
       buf= buf[:size]
 
       //if the go routine is acting as the leader
-      if leaderId == raft_obj.ServerId() {
+      if leaderId == raft_obj.ServerId {
 
             //calling the append function for sending the append entries rpc
             go raft_obj.Append(buf)
 
             //waiting for the commit channel to send a value
-           // <- raft_obj.commitCh
+            <- raft_obj.CommitCh
 
             commands := string(buf)
             commands = strings.TrimSpace(commands)
@@ -323,20 +336,13 @@ func handleRequest(conn net.Conn, raft_obj *raft.Raft) {
                   conn.Write([]byte("ERRCMDERR\r\n"))
               }
           } else {
+
+                  fmt.Println("Append Entries Call For:",raft_obj.ServerId)
                   //case where server acts as the follower
-
-               /* type tmp struct{}
-
-                 func (t *tmp) accept(logentry *raft.LogEntity, reply *bool) error {
-                      //adding the log entry to followers log
-                      raft_obj.log = append(raft_obj.log,*logentry)
-                      *reply = true
-                      return nil
-                  }
                   cal := new(tmp)
                   rpc.Register(cal)
 
-                  go rpc.ServeConn(conn)*/
+                  go rpc.ServeConn(conn)
             }  
       }
 }

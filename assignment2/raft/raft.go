@@ -31,13 +31,13 @@ type SharedLog interface {
 
 //structure for log entry
 type LogEntity struct {
-	lsn Lsn
-	data []byte
-	committed bool
+	Loglsn Lsn
+	Data []byte
+	Committed bool
 }
 
 //LogEntity implements the LogEntry interface
-func (le LogEntity) Lsn() Lsn {
+/*func (le LogEntity) Lsn() Lsn {
 	return le.lsn
 }
 
@@ -47,7 +47,7 @@ func (le LogEntity) Data() []byte {
 
 func (le LogEntity) Committed() bool {
 	return le.committed
-}
+}*/
 
 // Raft setup
 type ServerConfig struct {
@@ -65,11 +65,11 @@ type ClusterConfig struct {
 // Raft implements the SharedLog interface.
  type Raft struct {
 	// .... fill
-	clusterConfig ClusterConfig
-	commitCh chan LogEntry
-	serverId int
+	Clusterconfig ClusterConfig
+	CommitCh chan LogEntity
+	ServerId int
 	//array of log entries maintained by each server
-	log []LogEntity
+	Log []LogEntity
 }
 
 var ackCount chan int
@@ -101,7 +101,7 @@ func sendRpc(value ServerConfig,logEntity LogEntity) {
 }
 
 //raft implementing the shared log interface
-func (raft *Raft) Append(data []byte) (LogEntry,error) {
+func (raft *Raft) Append(data []byte) (LogEntity,error) {
 	
 	ackCount=make(chan int)
 	
@@ -111,12 +111,12 @@ func (raft *Raft) Append(data []byte) (LogEntry,error) {
 					false,
 					}
 	
-	raft.log=append(raft.log,logEntity)
+	raft.Log=append(raft.Log,logEntity)
 
-	cc := raft.clusterConfig
+	cc := raft.Clusterconfig
 
 	for _,value := range cc.Servers {
-		if(value.Id != raft.serverId) {
+		if(value.Id != raft.ServerId) {
 			go sendRpc(value,logEntity)
 			<- ackCount
 		}
@@ -124,26 +124,22 @@ func (raft *Raft) Append(data []byte) (LogEntry,error) {
 	unique_lsn++
 
 	//the majority acks have been received
-	raft.commitCh <- logEntity
+	raft.CommitCh <- logEntity
 
 	return logEntity,nil
 }
 
-//Getter for the id of the server with the current raft object
-func (raft Raft) ServerId() int {
-	return raft.serverId
-}
 
 // Creates a raft object. This implements the SharedLog interface.
 // commitCh is the channel that the kvstore waits on for committed messages.
 // When the process starts, the local disk log is read and all committed
 // entries are recovered and replayed
-func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntry) (*Raft, error) {
+func NewRaft(config *ClusterConfig, thisServerId int, commitCh chan LogEntity) (*Raft, error) {
 	
 	var raft Raft
-	raft.clusterConfig=*config
-	raft.commitCh=commitCh
-	raft.serverId=thisServerId
+	raft.Clusterconfig=*config
+	raft.CommitCh=commitCh
+	raft.ServerId=thisServerId
 	return &raft, nil
 }
 

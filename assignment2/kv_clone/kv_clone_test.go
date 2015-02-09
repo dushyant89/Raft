@@ -4,13 +4,13 @@ import (
 	"testing"
 	"net"
 	//"strings"
-	"time"
+	//"time"
 )
 
 func TestMain(t *testing.T) {
 
 	//this call starts the server for listening to connections
-	go main()
+	//go main()
 }
 
 type TestCase struct {
