@@ -14,7 +14,8 @@ The way RAFT handles problem of consensus is by way of electing a leader among c
 For checkout use following command:
 <code>go get</code> github.com/dushyant89/cs733/assignment2
 
-This is the directory structure for project:
+Below is the directory structure for project:
+
 1. <b>kv_clone Directory:</b>
   * kv_clone.go: This file contains the server side code. Server listens for both clients and servers on client port and log port respectively. After receiving the majority server pushes the changes on persistent log.
   * kv_clone_test.go: Contains all the test cases including commands which are fired concurrently evaluating all the necessary scenarios.
