@@ -29,7 +29,10 @@ type Memcache struct {
   exptime int64
   lastLived time.Time
 }
-
+ 
+ //adding wait group for synchronization between the go routines
+ var wg sync.WaitGroup
+ 
  //map which stores all the key-value data on the server 
  var store =make(map[string]Memcache)
 
@@ -46,14 +49,19 @@ type Memcache struct {
  var raft_obj *raft.Raft
 
  //temporary struct to make the rpc call to work, offcourse will think of something useful
- type tmp struct{}
+ type Temp struct{}
 
- func (t *tmp) accept(logentry *raft.LogEntity, reply *bool) error {
-      //adding the log entry to followers log
-      raft_obj.Log = append(raft_obj.Log,*logentry)
+ func (t *Temp) AcceptLogEntry(logentry *raft.LogEntity, reply *bool) error {      
+      mutex.Lock()
+        //appending the log entry to followers log
+        raft_obj.Log = append(raft_obj.Log,*logentry)
+      mutex.Unlock()
+
       *reply = true
       return nil
   }
+
+var cal=new(Temp)
 
 func main() {
 
@@ -77,15 +85,14 @@ func main() {
     servers:= cc.Servers     //array containing the details of the servers to start at different ports
 
     for _, value := range servers {
-      if(value.Id==serverId)  {   
+      if(value.Id==serverId)  {
+            wg.Add(1)
             go spawnServers(cc,value)
+            defer wg.Done()
          } 
     }
 
-    for {
-          //weird way of holding the main function, will change once a better solution is found
-          time.Sleep(1*time.Hour)
-    }
+    wg.Wait()
 }
 
 func spawnServers(cc raft.ClusterConfig,sc raft.ServerConfig) {
@@ -97,6 +104,8 @@ func spawnServers(cc raft.ClusterConfig,sc raft.ServerConfig) {
         port=strconv.Itoa(sc.ClientPort)
     } else {
         port=strconv.Itoa(sc.LogPort)
+        //register the rpc call if not the leader
+        rpc.Register(cal)
     }
 
     l, err:= net.Listen(CONN_TYPE,sc.Host+":"+port)
@@ -117,8 +126,14 @@ func spawnServers(cc raft.ClusterConfig,sc raft.ServerConfig) {
         if err != nil {
             log.Print("Error accepting: ", err.Error())
         }
-        // Handle connections in a new goroutine.
-        go handleRequest(conn,raft_obj)
+        if sc.Id != leaderId { 
+            //if follower then serve the rpc request
+            go rpc.ServeConn(conn)
+
+        } else {
+              // Handle connections in a new goroutine for the leader
+              go handleRequest(conn)
+        }
       }
 }
 
@@ -152,8 +167,8 @@ func set(conn net.Conn,commands []string,noReply *bool) {
       mutex.Unlock()  
         
       if(!(*noReply)) {
-        conn.Write([]byte("OK "+strconv.FormatInt(unique_version,10)+"\r\n"))
-        *noReply=false
+          conn.Write([]byte("OK "+strconv.FormatInt(unique_version,10)+"\r\n"))
+          *noReply=false
       }
 }
 
@@ -268,8 +283,8 @@ func checkTimeStamp() {
     }
 }
 
-// Handles incoming requests.
-func handleRequest(conn net.Conn, raft_obj *raft.Raft) {
+// Handles incoming requests from clients only
+func handleRequest(conn net.Conn) {
 
   // Close the connection when you're done with it.
   defer conn.Close()
@@ -279,70 +294,62 @@ func handleRequest(conn net.Conn, raft_obj *raft.Raft) {
       buf := make([]byte, 1024)
       // Read the incoming connection into the buffer.
       size, err := conn.Read(buf)
-      
+    
+    if size > 0 {
+
       if err != nil {
         log.Print("Error reading:", err.Error())
       }
 
       buf= buf[:size]
 
-      //if the go routine is acting as the leader
-      if leaderId == raft_obj.ServerId {
+      //calling the append function for sending the append entries rpc
+      go raft_obj.Append(buf)
 
-            //calling the append function for sending the append entries rpc
-            go raft_obj.Append(buf)
+      //waiting for the commit channel to send a value and then the leader can proceed
+      //with unpacking the command from the client
+      <- raft_obj.CommitCh
 
-            //waiting for the commit channel to send a value
-            <- raft_obj.CommitCh
+      commands := string(buf)
+      commands = strings.TrimSpace(commands)
+      lineSeparator := strings.Split(commands,"\r\n")
 
-            commands := string(buf)
-            commands = strings.TrimSpace(commands)
-            lineSeparator := strings.Split(commands,"\r\n")
+      //separate the command and the following value if there is any
+      arrayOfCommands:= strings.Fields(lineSeparator[0])
+      var newArrayOfCommands[] string
+      //that means the case where there is a value, append to the array of commands
+      if len(lineSeparator) >1 {
+          newArrayOfCommands = make([] string,len(arrayOfCommands),len(arrayOfCommands)+1)
+          copy(newArrayOfCommands,arrayOfCommands)
+          newArrayOfCommands=append(newArrayOfCommands,lineSeparator[1])
+      } else {
+          newArrayOfCommands= make([] string,len(arrayOfCommands))
+          copy(newArrayOfCommands,arrayOfCommands)
+      }   
 
-            //separate the command and the following value if there is any
-            arrayOfCommands:= strings.Fields(lineSeparator[0])
-            var newArrayOfCommands[] string
-            //that means the case where there is a value, append to the array of commands
-            if len(lineSeparator) >1 {
-                newArrayOfCommands = make([] string,len(arrayOfCommands),len(arrayOfCommands)+1)
-                copy(newArrayOfCommands,arrayOfCommands)
-                newArrayOfCommands=append(newArrayOfCommands,lineSeparator[1])
-            } else {
-                newArrayOfCommands= make([] string,len(arrayOfCommands))
-                copy(newArrayOfCommands,arrayOfCommands)
-            }   
+      checkTimeStamp()
 
-            checkTimeStamp()
+      //the first element of the array will always be the command name
+      var noReply bool= false
+      
+      if(arrayOfCommands[0]=="set") {
+            set(conn,newArrayOfCommands[1:],&noReply)
 
-            //the first element of the array will always be the command name
-            var noReply bool= false
-            
-            if(arrayOfCommands[0]=="set") {
-                  set(conn,newArrayOfCommands[1:],&noReply)
+        } else if(arrayOfCommands[0]=="cas") {
+            cas(conn,newArrayOfCommands[1:],&noReply)
 
-              } else if(arrayOfCommands[0]=="cas") {
-                  cas(conn,newArrayOfCommands[1:],&noReply)
+        } else if(arrayOfCommands[0]=="get") {
+            get(conn,newArrayOfCommands[1:])
 
-              } else if(arrayOfCommands[0]=="get") {
-                  get(conn,newArrayOfCommands[1:])
+        } else if(arrayOfCommands[0]=="getm") {
+            getm(conn,newArrayOfCommands[1:]) 
 
-              } else if(arrayOfCommands[0]=="getm") {
-                  getm(conn,newArrayOfCommands[1:]) 
+        } else if(arrayOfCommands[0]=="delete") {
+            deleteEntry(conn,newArrayOfCommands[1:]) 
 
-              } else if(arrayOfCommands[0]=="delete") {
-                  deleteEntry(conn,newArrayOfCommands[1:]) 
-
-              } else {
-                  conn.Write([]byte("ERRCMDERR\r\n"))
-              }
-          } else {
-
-                  fmt.Println("Append Entries Call For:",raft_obj.ServerId)
-                  //case where server acts as the follower
-                  cal := new(tmp)
-                  rpc.Register(cal)
-
-                  go rpc.ServeConn(conn)
-            }  
+        } else {
+            conn.Write([]byte("ERRCMDERR\r\n"))
+        }
       }
+    }  
 }

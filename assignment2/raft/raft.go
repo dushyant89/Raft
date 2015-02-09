@@ -4,6 +4,7 @@ import(
 	"strconv"
 	"log"
 	"net/rpc"
+	"sync"
 )
 
 type Lsn uint64 //Log sequence number, unique for all time.
@@ -11,6 +12,9 @@ type Lsn uint64 //Log sequence number, unique for all time.
 var unique_lsn Lsn = 1000
 
 type ErrRedirect int // See Log.Append. Implements Error interface.
+
+//defining the mutex to be used for RW operation for multiple clients
+ var mutex = &sync.RWMutex{}
 
 type LogEntry interface {
 	Lsn() Lsn
@@ -87,7 +91,8 @@ func sendRpc(value ServerConfig,logEntity LogEntity) {
 	
 	//this reply is the ack from the followers receiving the append entries
 	var reply bool
-	err = client.Call("tmp.acceptLogEntry", args, &reply) 
+
+	err = client.Call("Temp.AcceptLogEntry", args, &reply) 
 
 	if err != nil {
 		log.Print("Remote Method Invocation Error:", err)
@@ -110,7 +115,8 @@ func (raft *Raft) Append(data []byte) (LogEntity,error) {
 					data,
 					false,
 					}
-	
+	//locking the access to the log of leader for multiple clients
+	mutex.Lock()
 	raft.Log=append(raft.Log,logEntity)
 
 	cc := raft.Clusterconfig
@@ -121,11 +127,13 @@ func (raft *Raft) Append(data []byte) (LogEntity,error) {
 			<- ackCount
 		}
 	}
+
+	//incrementing the log sequence for every append request
 	unique_lsn++
 
 	//the majority acks have been received
 	raft.CommitCh <- logEntity
-
+	mutex.Unlock()
 	return logEntity,nil
 }
 
