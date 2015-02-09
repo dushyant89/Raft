@@ -10,7 +10,7 @@ This is Go implementation of the Raft distributed consensus protocol. Raft is a 
 The way RAFT handles problem of consensus is by way of electing a leader among cluster. By which, that entry point(leader) deals with all the incoming traffic from clients. If leader by any means goes down then there will be re-election to choose the new leader and the process goes on. We make sure that safety and liveness properties are maintained throughout.
 
 ### Checkout Project and Directory Structure
-<br/>
+
 For checkout use following command:
 <code>go get</code> github.com/dushyant89/cs733/assignment2
 
