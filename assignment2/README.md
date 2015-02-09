@@ -15,14 +15,14 @@ For checkout use following command:
 <code>go get</code> github.com/dushyant89/cs733/assignment2
 
 This is the directory structure for project:
-[] <b>kv_clone Directory:</b>
-	[]kv_clone.go: This file contains the server side code. Server listens for both clients and servers on client port and log port respectively. After receiving the majority server pushes the changes on persistent log.
-	[]kv_clone_test.go: Contains all the test cases including commands which are fired concurrently evaluating all the necessary scenarios.
-[] <b>raft Directory:</b>
-	[]raft.go: This file has code for Raft object which is used by each server to initialize itself. It also contains code for method Append() which appends the log and invokes the sendRPC method th send the log to other servers.
-[] <b>server-spawner Directory:</b>
-	[]server-spawner.go: For spawning multiple servers.
-[] <b>server.json:</b> Detail about servers is given here. It contains port number for host and log ports.
+1. <b>kv_clone Directory:</b>
+  a) kv_clone.go: This file contains the server side code. Server listens for both clients and servers on client port and log port respectively. After receiving the majority server pushes the changes on persistent log.
+  b) kv_clone_test.go: Contains all the test cases including commands which are fired concurrently evaluating all the necessary scenarios.
+2. <b>raft Directory:</b>
+  a) raft.go: This file has code for Raft object which is used by each server to initialize itself. It also contains code for method Append() which appends the log and invokes the sendRPC method th send the log to other servers.
+3. <b>server-spawner Directory:</b>
+  a) server-spawner.go: For spawning multiple servers.
+4. <b>server.json:</b> Detail about servers is given here. It contains port number for host and log ports.
 
 
 ### Build and Installation Instructions
