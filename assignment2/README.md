@@ -15,22 +15,23 @@ For checkout use following command:
 <code>go get</code> github.com/dushyant89/cs733/assignment2
 
 This is the directory structure for project:
-* kv_clone Directory:
-	** kv_clone.go: This file contains the server side code. Server listens for both clients and servers 	on client port and log port respectively. After receiving the majority server pushes the changes 		on persistent log.
-	** kv_clone_test.go: Contains all the test cases including commands which are fired concurrently 	evaluating all the necessary scenarios.
-* raft Directory:
-	** raft.go: This file has code for Raft object which is used by each server to initialize itself. It 	also contains code for method Append() which appends the log and invokes the sendRPC method th send the log to other servers.
-* server-spawner Directory:
-	** server-spawner.go: For spawning multiple servers.
-* server.json: Detail about servers is given here. It contains port number for host and log ports.
+* <b>kv_clone Directory:</b>
+		kv_clone.go: This file contains the server side code. Server listens for both clients and servers 	on client port and log port respectively. After receiving the majority server pushes the changes 		on persistent log.
+		kv_clone_test.go: Contains all the test cases including commands which are fired concurrently 	evaluating all the necessary scenarios.
+* <b>raft Directory:</b>
+		raft.go: This file has code for Raft object which is used by each server to initialize itself. It 	also contains code for method Append() which appends the log and invokes the sendRPC method th send the log to other servers.
+* <b>server-spawner Directory:</b>
+		server-spawner.go: For spawning multiple servers.
+* <b>server.json:</b> Detail about servers is given here. It contains port number for host and log ports.
 
 
 ## Build and Installation Instructions
 First go to “server-spawner” directory from command line and run:
 <code>go install</code> <br/>
-Go to “bin” directory then run 'server-spawner' which will start the servers according to the configuration in server.json.
+Go to “bin” directory then run <code>server-spawner</code> which will start the servers according to the configuration in server.json.
+<br/>
 Then go to “kv_clone” directory and run:
-<code>go test </code>
+<code>go test </code> <br/>
 
 ## Todo
 1. Project when run with multiple concurrent client configuration sometimes goes in a deadlock. So need to work on it.
