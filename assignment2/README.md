@@ -1,28 +1,36 @@
-Assignment 2- GO Implementation of RAFT Distributed Consensus Protocol
-Description
+### Assignment 2- GO Implementation of RAFT Distributed Consensus Protocol <br/>
+
+## Description
+
 This is Go implementation of the Raft distributed consensus protocol. Raft is a protocol by which a cluster of nodes can maintain a replicated state machine. The state machine is kept in sync through the use of replicated log. 
-RAFT Protocol Overview
-RAFT protocol works for distributed systems. Which provides multiple entry points in architecture. Any server can crash at any time or there might be network partition in cluster. So single entry point will not work in case of distributed architecture. 
+
+## RAFT Protocol Overview
+
+<code>RAFT</code> protocol works for distributed systems. Which provides multiple entry points in architecture. Any server can crash at any time or there might be network partition in cluster. So single entry point will not work in case of distributed architecture. 
 The way RAFT handles problem of consensus is by way of electing a leader among cluster. By which, that entry point(leader) deals with all the incoming traffic from clients. If leader by any means goes down then there will be re-election to choose the new leader and the process goes on. We make sure that safety and liveness properties are maintained throughout.
-Checkout Project and Directory Structure
+
+##Checkout Project and Directory Structure
+<br/>
 For checkout use following command:
-go get github.com/dushyant89/cs733/assignment2
+<code>go get</code> github.com/dushyant89/cs733/assignment2
+
 This is the directory structure for project:
-? kv_clone Directory:
-	ñ kv_clone.go: This file contains the server side code. Server listens for both clients and servers 	on client port and log port respectively. After receiving the majority server pushes the changes 		on persistent log.
-	ñ kv_clone_test.go: Contains all the test cases including commands which are fired concurrently 	evaluating all the necessary scenarios.
-? raft Directory:
-	ñ raft.go: This file has code for Raft object which is used by each server to initialize itself. It 	also contains code for method Append() which appends the log and invokes the sendRPC method th send the log to other servers.
-? server-spawner Directory:
-	ñ server-spawner.go: For spawning multiple servers.
-? server.json: Detail about servers is given here. It contains port number for host and log ports.
+* kv_clone Directory:
+	‚Äì kv_clone.go: This file contains the server side code. Server listens for both clients and servers 	on client port and log port respectively. After receiving the majority server pushes the changes 		on persistent log.
+	‚Äì kv_clone_test.go: Contains all the test cases including commands which are fired concurrently 	evaluating all the necessary scenarios.
+* raft Directory:
+	‚Äì raft.go: This file has code for Raft object which is used by each server to initialize itself. It 	also contains code for method Append() which appends the log and invokes the sendRPC method th send the log to other servers.
+* server-spawner Directory:
+	‚Äì server-spawner.go: For spawning multiple servers.
+* server.json: Detail about servers is given here. It contains port number for host and log ports.
 
 
-Build and Installation Instructions
-First go to ìserver-spawnerî directory from command line and run:
-go install
-Go to ìbinî directory then run 'server-spawner' which will start the servers according to the configuration in server.json.
-Then go to ìkv_cloneî directory and run:
-go test
-Todo
+## Build and Installation Instructions
+First go to ‚Äúserver-spawner‚Äù directory from command line and run:
+<code>go install</code>
+Go to ‚Äúbin‚Äù directory then run 'server-spawner' which will start the servers according to the configuration in server.json.
+Then go to ‚Äúkv_clone‚Äù directory and run:
+<code>go test </code>
+
+## Todo
 1. Project when run with multiple concurrent client configuration sometimes goes in a deadlock. So need to work on it.
