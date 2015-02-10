@@ -5,6 +5,7 @@ import (
 	"net"
 	//"strings"
 	//"time"
+	//"fmt"
 )
 
 func TestMain(t *testing.T) {
@@ -56,20 +57,19 @@ func shootTestCase(t *testing.T, routineID int, testcases []TestCase) {
 	    
 	    if(!c.noReply) {		
 		
-		size,err:=conn.Read(got)
+			size,err:=conn.Read(got)
 
-		if(err!=nil) {
-			t.Errorf("Error Reading from the server",err.Error())
-		}
+			if(err!=nil) {
+				t.Errorf("Error Reading from the server",err.Error())
+			}
 
-		got=got[:size]
-		response:= string(got)
-		//response=strings.TrimSpace(response)
+			got=got[:size]
+			response:= string(got)
+			//response=strings.TrimSpace(response)
 
-		if(c.want!=response) {
-			t.Errorf("Expected: %s Got:%s for routine: %d",c.want,string(got),routineID)
-		}
-		
+			if(c.want!=response) {
+				t.Errorf("Expected: %s Got:%s for routine: %d",c.want,string(got),routineID)
+			}
 		}	
 	}
 

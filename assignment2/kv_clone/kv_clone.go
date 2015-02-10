@@ -97,20 +97,21 @@ func main() {
 
 func spawnServers(cc raft.ClusterConfig,sc raft.ServerConfig) {
 
-    // Listen for incoming connections.
-    var port string
+    wg.Add(2)
+    // Listen for incoming connections from servers
+    go listenForServers(sc,strconv.Itoa(sc.LogPort))
+    defer wg.Done()
+    // Listen for incoming connections from clients
+    go listenForClients(cc,sc,strconv.Itoa(sc.ClientPort))
+    defer wg.Done()
 
-    if sc.Id == leaderId {  //if leader then start the client port else log port
-        port=strconv.Itoa(sc.ClientPort)
-    } else {
-        port=strconv.Itoa(sc.LogPort)
-        //register the rpc call if not the leader
-        rpc.Register(cal)
-    }
+    wg.Wait()
+    
+}
+
+func listenForClients(cc raft.ClusterConfig,sc raft.ServerConfig,port string){
 
     l, err:= net.Listen(CONN_TYPE,sc.Host+":"+port)
-
-    fmt.Println("Listening for:"+sc.Host+":"+port)
 
     if err != nil {
         log.Print("Error listening:", err.Error())
@@ -118,23 +119,41 @@ func spawnServers(cc raft.ClusterConfig,sc raft.ServerConfig) {
     // Close the listener when the application closes.
     defer l.Close()
     
+    //creating new raft object
     raft_obj,_=raft.NewRaft(&cc,sc.Id,make(chan raft.LogEntity))
 
     for {
-        // Listen for an incoming connection.
-        conn, err := l.Accept()
-        if err != nil {
-            log.Print("Error accepting: ", err.Error())
+          // Listen for an incoming connection.
+          conn, err := l.Accept()
+          if err != nil {
+              log.Print("Error accepting Connection Requests: ", err.Error())
+          }        
+          // Handle connections in a new goroutine for the leader
+          go handleRequest(conn)
         }
-        if sc.Id != leaderId { 
-            //if follower then serve the rpc request
-            go rpc.ServeConn(conn)
+}
 
-        } else {
-              // Handle connections in a new goroutine for the leader
-              go handleRequest(conn)
+func listenForServers(sc raft.ServerConfig,port string) {
+    
+    rpc.Register(cal)
+
+    l, err:= net.Listen(CONN_TYPE,sc.Host+":"+port)
+
+    if err != nil {
+        log.Print("Error listening:", err.Error())
+    }
+    // Close the listener when the application closes.
+    defer l.Close()
+
+    for {
+          // Listen for an incoming connection.
+          conn, err := l.Accept()
+          if err != nil {
+              log.Print("Error accepting RPC's: ", err.Error())
+          }        
+          // serve rpc's in a new goroutine for append entries
+          go rpc.ServeConn(conn)
         }
-      }
 }
 
 //sets the new key in the map
