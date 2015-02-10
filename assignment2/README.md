@@ -17,14 +17,16 @@ For checkout use following command:
 
 Below is the directory structure for project:
 
-1. <b>kv_clone Directory:</b>
+1. <b>kv_clone:</b>
   * kv_clone.go: This file contains the server side code. Server listens for both clients and servers on client port and log port respectively. After receiving the majority server pushes the changes on persistent log.
   * kv_clone_test.go: Contains all the test cases including commands which are fired concurrently evaluating all the necessary scenarios.
-2. <b>raft Directory:</b>
+2. <b>raft:</b>
   * raft.go: This file has code for Raft object which is used by each server to initialize itself. It also contains code for method <code>Append()</code> which appends the log and invokes the sendRPC method th send the log to other servers.
-3. <b>server-spawner Directory:</b>
+3. <b>server-spawner:</b>
   * server-spawner.go: For spawning multiple servers.
-4. <b>server.json:</b> Detail about servers is given here. It contains port number for host and log ports.
+4. <b>server.json:</b> This file contains the configuration details with which the project will start. Below are some configurable parameters
+  * No. of servers for participating in the consensus protocol
+  * Port no.s for listening to clients and fellow servers part of the same cluster
 
 
 ### Build and Installation Instructions
