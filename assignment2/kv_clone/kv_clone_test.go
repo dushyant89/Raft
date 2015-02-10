@@ -40,11 +40,13 @@ func fireTestCases(t *testing.T, n int, testcases []TestCase) {
 
 func shootTestCase(t *testing.T, routineID int, testcases []TestCase) {
 	
+	//fmt.Println("Shooting test case for:",routineID)
+	
 	tcpAddr, err := net.ResolveTCPAddr(CONN_TYPE,CONN_HOST+ ":" +CONN_PORT)
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 
 	if(err!=nil) {
-		t.Errorf("Error Dialing to the server")	
+		t.Errorf("Error Dialing to the server")
 	}
 	
 	defer conn.Close()
@@ -70,14 +72,17 @@ func shootTestCase(t *testing.T, routineID int, testcases []TestCase) {
 			if(c.want!=response) {
 				t.Errorf("Expected: %s Got:%s for routine: %d",c.want,string(got),routineID)
 			}
-		}	
+		}
 	}
 
 	wait_ch <- routineID
+	//fmt.Println("Completed testcase for:",routineID)
 }
 
 func TestCase1(t *testing.T) {
 
+	//fmt.Println("Testcases batch 1")
+	
 	n:=1
 
 	var testcases = []TestCase {
@@ -90,5 +95,28 @@ func TestCase1(t *testing.T) {
 		{"getm rahul\r\n","VALUE 1003 100 9 db-phatak\r\n",false},
 	}
 	fireTestCases(t,n,testcases)
+	
+	//fmt.Println("Testcases batch 2")
+	
+	n=3
 
+	testcases = []TestCase {
+		/*{"delete raavi\r\n","ERRNOTFOUND\r\n",false},
+		{"delete ravi\r\n","DELETED\r\n",false},
+		{"cas dushyant 300 1001 4\r\nMSCI\r\n","OK 1004\r\n",false},*/
+		{"getm rahul\r\n","VALUE 1003 100 9 db-phatak\r\n",false},
+	}
+	fireTestCases(t,n,testcases)
+
+	//fmt.Println("Testcases batch 3")
+	
+	n=50
+
+	testcases = []TestCase {
+		/*{"delete raavi\r\n","ERRNOTFOUND\r\n",false},
+		{"delete ravi\r\n","DELETED\r\n",false},
+		{"cas dushyant 300 1001 4\r\nMSCI\r\n","OK 1004\r\n",false},*/
+		{"getm dushyant\r\n","VALUE 1001 200 10 gulf-talent\r\n",false},
+	}
+	fireTestCases(t,n,testcases)
 }

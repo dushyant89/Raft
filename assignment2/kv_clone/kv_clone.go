@@ -12,7 +12,7 @@ import (
     "encoding/json"
     "io/ioutil"
     "os"
-    "fmt"
+    //"fmt"
 )
 
 //details of the leader hardcoded for time being
@@ -55,6 +55,7 @@ type Memcache struct {
       mutex.Lock()
         //appending the log entry to followers log
         raft_obj.Log = append(raft_obj.Log,*logentry)
+        //fmt.Println("Append entry for:",raft_obj.ServerId," with data:",string(logentry.Data))
       mutex.Unlock()
 
       *reply = true
@@ -68,7 +69,7 @@ func main() {
     //fetching the serverId from the command line args
     serverId, err := strconv.Atoi(os.Args[1])
 
-    fmt.Println(serverId)
+    //fmt.Println(serverId)
 
     var cc raft.ClusterConfig
 
@@ -113,6 +114,8 @@ func listenForClients(cc raft.ClusterConfig,sc raft.ServerConfig,port string){
 
     l, err:= net.Listen(CONN_TYPE,sc.Host+":"+port)
 
+    //fmt.Println("Listening clients on:",sc.Host+":"+port)
+
     if err != nil {
         log.Print("Error listening:", err.Error())
     }
@@ -138,6 +141,8 @@ func listenForServers(sc raft.ServerConfig,port string) {
     rpc.Register(cal)
 
     l, err:= net.Listen(CONN_TYPE,sc.Host+":"+port)
+
+    //fmt.Println("Listening servers on:",sc.Host+":"+port)
 
     if err != nil {
         log.Print("Error listening:", err.Error())
@@ -305,6 +310,8 @@ func checkTimeStamp() {
 // Handles incoming requests from clients only
 func handleRequest(conn net.Conn) {
 
+  //fmt.Println("Handling connection for:",conn.RemoteAddr())
+  
   // Close the connection when you're done with it.
   defer conn.Close()
   
@@ -328,6 +335,8 @@ func handleRequest(conn net.Conn) {
       //waiting for the commit channel to send a value and then the leader can proceed
       //with unpacking the command from the client
       <- raft_obj.CommitCh
+
+      //fmt.Println("Now proceeding with the command processing")
 
       commands := string(buf)
       commands = strings.TrimSpace(commands)
@@ -369,6 +378,8 @@ func handleRequest(conn net.Conn) {
         } else {
             conn.Write([]byte("ERRCMDERR\r\n"))
         }
+      } else {
+          //fmt.Println("Reading EOF from conn")
       }
     }  
 }

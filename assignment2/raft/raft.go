@@ -5,6 +5,7 @@ import(
 	"log"
 	"net/rpc"
 	"sync"
+	//"fmt"
 )
 
 type Lsn uint64 //Log sequence number, unique for all time.
@@ -76,11 +77,13 @@ type ClusterConfig struct {
 	Log []LogEntity
 }
 
-var ackCount chan int
+var ackCount =make(chan int)
 
 func sendRpc(value ServerConfig,logEntity LogEntity) {
 //not to send the append entries rpc to the leader itself 
-		
+	
+	//fmt.Println("Sending RPCs to:",value.Host+":"+strconv.Itoa(value.LogPort))	
+	
 	client, err := rpc.Dial("tcp", value.Host+":"+strconv.Itoa(value.LogPort))
 	 
 	 if err != nil {
@@ -100,6 +103,7 @@ func sendRpc(value ServerConfig,logEntity LogEntity) {
 	replyCount:=0
 
 	if(reply) {
+		//fmt.Println("Received reply for:",value.Id)
 		replyCount++
 		ackCount <- replyCount
 	}
@@ -107,8 +111,8 @@ func sendRpc(value ServerConfig,logEntity LogEntity) {
 
 //raft implementing the shared log interface
 func (raft *Raft) Append(data []byte) (LogEntity,error) {
-	
-	ackCount=make(chan int)
+
+	//fmt.Println("Ready to append the data")
 	
 	logEntity:= LogEntity{
 					unique_lsn,
@@ -133,6 +137,9 @@ func (raft *Raft) Append(data []byte) (LogEntity,error) {
 
 	//the majority acks have been received
 	raft.CommitCh <- logEntity
+
+	//fmt.Println("Released the lock")
+
 	mutex.Unlock()
 	return logEntity,nil
 }
