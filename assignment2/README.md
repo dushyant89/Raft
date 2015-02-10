@@ -34,4 +34,5 @@ Below is the directory structure for project:
  <br/><code>go test </code>
 
 ### Todo
-1. Project when run with multiple concurrent client configuration sometimes goes in a deadlock. So need to work on it.
+1. ~~Project when run with multiple concurrent client configuration sometimes goes in a deadlock. So need to work on it.~~
+2. Completing the remaining specifications which are part of the RAFT protocol
