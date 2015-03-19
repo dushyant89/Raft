@@ -17,5 +17,5 @@ To run the program only below command is needed (assuming the current directory 
 1. Since Telnet client was not used during the development of the project so the use of "\r\n" is avoided in the commands and reply
 
 ### Todo
-1. Test the project on concurrent requests in order of ten's of thousands
+1. ~~Test the project on concurrent requests in order of ten's of thousands~~
 2. Enable the project to shield from network attacks including Denial of Service
