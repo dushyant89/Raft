@@ -1,8 +1,8 @@
-## Assignment 3- GO Implementation of RAFT Distributed Consensus Protocol <br/>
+## Assignment 3- GO Implementation of RAFT's Leader Election, Log Replication and Safety Property <br/>
 
 ### Description
 
-This is Go implementation of the Raft distributed consensus protocol. Raft is a protocol by which a cluster of nodes can maintain a replicated state machine. The state machine is kept in sync through the use of replicated log. 
+This is a Go implementation of the 3 major components of Raft distributed consensus protocol. Raft is a protocol by which a cluster of nodes can maintain a replicated state machine. The state machine is kept in sync through the use of replicated log. 
 
 ### RAFT Protocol Overview
 
