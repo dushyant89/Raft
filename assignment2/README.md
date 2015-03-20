@@ -30,10 +30,12 @@ Below is the directory structure for project:
 
 
 ### Build and Installation Instructions
+* Go to “kv_clone” directory from command line and run:
+ <br/><code>go install </code>
 * Go to “server-spawner” directory from command line and run:
 <br/><code>go install</code>
 * Go to “bin” directory then run <code>server-spawner</code> which will start the servers according to the configuration in server.json.
-* Go to “kv_clone” directory and run:
+* Go to “kv_clone” directory and run for testing the assignment:
  <br/><code>go test </code>
 
 ### Todo
