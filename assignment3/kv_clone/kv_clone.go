@@ -20,6 +20,9 @@ const (
     CONN_HOST = "localhost"
     CONN_PORT = "9000"
     CONN_TYPE = "tcp"
+    Follower= "Follower"
+    Candidate="Candidate"
+    Leader="Leader"
 )
 
 type Memcache struct {
@@ -51,16 +54,65 @@ type Memcache struct {
  //temporary struct to make the rpc call to work, offcourse will think of something useful
  type Temp struct{}
 
- func (t *Temp) AcceptLogEntry(logentry *raft.LogEntity, reply *bool) error {      
+func (t *Temp) AcceptLogEntry(logentry *raft.LogEntity, reply *bool) error {      
       mutex.Lock()
         //appending the log entry to followers log
-        raft_obj.Log = append(raft_obj.Log,*logentry)
-        //fmt.Println("Append entry for:",raft_obj.ServerId," with data:",string(logentry.Data))
+          if logentry!=nil {
+                raft_obj.Log = append(raft_obj.Log,*logentry)
+            } else {
+                //this is a case of heartbeat sent by the leader
+                //change the votedFor value
+                //reset the timer also
+                if raft_obj.VotedFor > -1 {
+                    raft_obj.VotedFor=-1
+                }
+                raft_obj.Timer=
+            }
+        
       mutex.Unlock()
 
       *reply = true
       return nil
-  }
+}
+
+func (t *Temp) AcceptVoteRequest(request *raft.VoteRequestStruct, reply *bool) error {      
+      
+      if raft_obj.CurrentTerm > request.Term || raft_obj.VotedFor >-1 {
+          *reply=false
+      } else if raft_obj.VotedFor== -1 {
+          //check for the log matching property if the server has not voted yet
+          //1. check for the length of the log
+          //2. terms which the last entries of the log contain
+          lastIndexVoter:= len(raft_obj.Log)
+          lastIndexCandidate:=request.LastLongIndex
+
+          if lastIndexVoter >0 && lastIndexCandidate>0 {
+              if raft_obj.log[lastIndexVoter-1].term > request.log[lastIndexCandidate].term {
+                  *reply=false
+              } else if raft_obj.log[lastIndexVoter-1].term == request.log[lastIndexCandidate].term  {
+                  if lastIndexVoter >lastIndexCandidate {
+                     *reply=false
+                  } else {
+                    *reply=true
+                  }
+              } else {
+                  *reply=true
+                }
+          } else if lastIndexVoter >lastIndexCandidate {
+            *reply=false
+          } else {
+            *reply=true
+          }
+      } else {
+          *reply=false
+      }
+
+      if(*reply) {
+          raft_obj.VotedFor=request.CandidateId
+      }
+
+    return nil
+}
 
 var cal=new(Temp)
 
@@ -85,6 +137,9 @@ func main() {
 
     servers:= cc.Servers     //array containing the details of the servers to start at different ports
 
+    //creating the new raft object here
+    raft_obj,_=raft.NewRaft(make([] raft.LogEntity),&cc,serverId,make(chan raft.LogEntity),Follower,-1)
+
     for _, value := range servers {
       if(value.Id==serverId)  {
             wg.Add(1)
@@ -92,7 +147,7 @@ func main() {
             defer wg.Done()
          } 
     }
-
+    //waiting for the go rouines to finish execution
     wg.Wait()
 }
 
@@ -121,9 +176,6 @@ func listenForClients(cc raft.ClusterConfig,sc raft.ServerConfig,port string){
     }
     // Close the listener when the application closes.
     defer l.Close()
-    
-    //creating new raft object
-    raft_obj,_=raft.NewRaft(&cc,sc.Id,make(chan raft.LogEntity))
 
     for {
           // Listen for an incoming connection.
@@ -141,6 +193,9 @@ func listenForServers(sc raft.ServerConfig,port string) {
     rpc.Register(cal)
 
     l, err:= net.Listen(CONN_TYPE,sc.Host+":"+port)
+
+    //set the election timer for the server
+    raft.SetTimer()
 
     //fmt.Println("Listening servers on:",sc.Host+":"+port)
 
@@ -379,7 +434,7 @@ func handleRequest(conn net.Conn) {
             conn.Write([]byte("ERRCMDERR\r\n"))
         }
       } else {
-          //fmt.Println("Reading EOF from conn")
+          break
       }
     }  
 }

@@ -98,15 +98,15 @@ func TestCase1(t *testing.T) {
 	
 	//fmt.Println("Testcases batch 2")
 	
-	n=3
+	//n=3
 
-	testcases = []TestCase {
+	//testcases = []TestCase {
 		/*{"delete raavi\r\n","ERRNOTFOUND\r\n",false},
 		{"delete ravi\r\n","DELETED\r\n",false},
 		{"cas dushyant 300 1001 4\r\nMSCI\r\n","OK 1004\r\n",false},*/
-		{"getm rahul\r\n","VALUE 1003 100 9 db-phatak\r\n",false},
-	}
-	fireTestCases(t,n,testcases)
+	//	{"getm rahul\r\n","VALUE 1003 100 9 db-phatak\r\n",false},
+	//}
+	//fireTestCases(t,n,testcases)
 
 	//fmt.Println("Testcases batch 3")
 	
