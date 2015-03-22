@@ -6,10 +6,14 @@ import(
 	"net/rpc"
 	"sync"
 	"time"
-	"math/rand"
-	//"fmt"
+	//"math/rand"
+	"fmt"
 )
 
+/**
+ TODO
+	Need to protect the access to the raft object using locks
+**/
 
 type ErrRedirect int // See Log.Append. Implements Error interface.
 
@@ -25,7 +29,7 @@ type SharedLog interface {
 // to indicate the server id of the leader. Append initiates
 // a local disk write and a broadcast to the other replicas,
 // and returns without waiting for the result.
-	Append(data []byte) (LogEntry, error)
+	Append(data []byte) (LogEntity, error)
 }
 
 // --------------------------------------
@@ -33,17 +37,17 @@ type SharedLog interface {
 //structure for log entry
 type LogEntity struct {
 	logIndex int
-	term int
-	data []byte
+	Term int
+	Data []byte
 	committed bool
 }
 
 // Raft setup
 type ServerConfig struct {
-	id int // Id of server. Must be unique
-	host string // name or ip of host
-	clientPort int // port at which server listens to client messages.
-	logPort int // tcp port for inter-replica protocol messages.
+	Id int // Id of server. Must be unique
+	Host string // name or ip of host
+	ClientPort int // port at which server listens to client messages.
+	LogPort int // tcp port for inter-replica protocol messages.
 }
 
 type ClusterConfig struct {
@@ -67,7 +71,7 @@ type ClusterConfig struct {
 	matchIndex []int
 	filePath string
 	State string
-	Timer time.Timer
+	Timer *time.Timer
 }
 
 type VoteRequestStruct struct {
@@ -77,25 +81,24 @@ type VoteRequestStruct struct {
 	Log []LogEntity //sending the log across the rpc to compare as to see whose log is more complete
 }
 
-var ackCount int =1
-var voteCount int =1
+var ackCount= make(chan int)
+var voteCount= make(chan int)
 
-func sendAppendRpc(value ServerConfig,logEntity LogEntity,heartbeat bool) {
+func (raft Raft) sendAppendRpc(value ServerConfig,logEntity LogEntity) {
 	//not to send the append entries rpc to the leader itself 
 	//fmt.Println("Sending RPCs to:",value.Host+":"+strconv.Itoa(value.LogPort))	
 	
+	mutex.Lock()
 	client, err := rpc.Dial("tcp", value.Host+":"+strconv.Itoa(value.LogPort))
 	 
 	 if err != nil {
 		log.Print("Error Dialing :", err)
 	 }
-	 var args
-	 // Synchronous call
-	if(!heartbeat) {
-		args = &logEntity
-	} else {
-		args = nil
-	}
+	var args *LogEntity
+	
+	// Synchronous call
+	args = &logEntity
+	 
 	//this reply is the ack from the followers receiving the append entries
 	var reply bool
 
@@ -105,74 +108,72 @@ func sendAppendRpc(value ServerConfig,logEntity LogEntity,heartbeat bool) {
 		log.Print("Remote Method Invocation Error:Append RPC:", err)
 	}
 
-	if(reply) {
-		//fmt.Println("Received reply for:",value.Id)
-		ackCount++
+	if reply {
+		 ackCount <- 1
 	}
+	mutex.Unlock()
 }
 
 //raft implementing the shared log interface
-func (raft *Raft) Append(data []byte,heartbeat bool) (LogEntity,error) {
+func (raft *Raft) Append(data []byte) (LogEntity,error) {
 
 	//fmt.Println("Ready to append the data")
 	
 	logEntity:= LogEntity{
 					len(raft.Log),
-					data,
 					raft.CurrentTerm,
+					data,
 					false,
 					}
 	//locking the access to the log of leader for multiple clients
 	mutex.Lock()
-	ackCount=0
 	raft.Log=append(raft.Log,logEntity)
 
 	cc := raft.Clusterconfig
+	count:= 1
 
 	for _,value := range cc.Servers {
-		if(value.Id != raft.ServerId) {
-			go sendRpc(value,logEntity)
+		if value.Id != raft.ServerId {
+			go raft.sendAppendRpc(value,logEntity)
+			count= count + <-ackCount
 		}
-	}
 
-	for() {
-		if(ackCount > len(cc.Servers)/2) { 
+		if count > len(cc.Servers)/2 { 
 			//the majority acks have been received, proceed to process and commit
 			raft.CommitCh <- logEntity			
 			return logEntity,nil
-		}	
+		}
 	}
 
 	mutex.Unlock()
 	return logEntity,nil
 }
 
-func (raft *Raft) sendVoteRequestRpc(value ServerConfig) int {
+func (raft *Raft) sendVoteRequestRpc(value ServerConfig) {
 
 	client, err := rpc.Dial("tcp", value.Host+":"+strconv.Itoa(value.LogPort))
-	 
+	
+	fmt.Print("Dialing vote request rpc from:",raft.ServerId)
+	fmt.Println(" to:",value.Id)
+
 	 if err != nil {
 		log.Print("Error Dialing :", err)
 	 }
 
 	 logLen:= len(raft.Log)
-	 var lastLogTerm
-	 var lastLongIndex
+	 var lastLongIndex int
 
 	 if logLen >0 {
-	 	lastLongIndex=logLen-1
-	 	lastLogTerm=raft.Log[lastLongIndex].term
+	 	lastLongIndex=logLen-1	 	
 	 } else {
 	 	lastLongIndex=0
-	 	lastLogTerm=0
 	 }
 
 	 args:= &VoteRequestStruct{
-	 		raft.currentTerm,
+	 		raft.CurrentTerm,
 	 		raft.ServerId,
 	 		lastLongIndex,
-	 		lastLogTerm,
-	 		raft.Log		
+	 		raft.Log,		
 	 }
 	
 	//this reply is the ack from the followers receiving the append entries
@@ -185,39 +186,65 @@ func (raft *Raft) sendVoteRequestRpc(value ServerConfig) int {
 	}
 
 	if(reply) {
-		//fmt.Println("Received reply for:",value.Id)
-		voteCount++
+		fmt.Print("Received reply of vote request from:",value.Id)
+		fmt.Println(" for:",raft.ServerId)
+		voteCount <-1
 	}
 }
 
 func (raft *Raft) voteRequest() {
 
+	fmt.Println("Sending vote requests for:",raft.ServerId)
+
 	//start the election and reset the vote count
 	cc := raft.Clusterconfig
 
 	//increment the current term and change the state to candidate and start sending the votes
+	
+	mutex.Lock()
+
 	raft.CurrentTerm+=1
-	raft.State=Candidate
+	raft.State="Candidate"
+	count :=1
 
 	for _,value := range cc.Servers {		
-			if(value.id != raft.ServerId) {	
+			if value.Id != raft.ServerId {	
 				go raft.sendVoteRequestRpc(value)
+				count= count + <- voteCount
+			}
+			if count > len(cc.Servers)/2  && raft.State!="Follower" {
+					fmt.Println("New leader is:",raft.ServerId)
+					//majority votes have been received, declare itself as the leader and start sending the heartbeats
+					raft.State="Leader"
+					raft.Append(make([] byte,0))
+					break
 			}	
 	}
-	
-	for {
-			if(voteCount > len(cc.Servers)/2) {
-				//majority votes have been received, declare itself as the leader and start sending the heartbeats
-		}
-	}
+
+	mutex.Unlock()
 
 }
 
 func (raft *Raft) SetTimer() {
-	var n:= rand.Intn(15)
-	raft.Timer = time.NewTimer(time.Millisecond*(15+n)*10)
+	//n:= rand.Intn(15)
+	//n=n+15
+	fmt.Println("Timer set for:",raft.ServerId)
+
+	if raft.ServerId==0 {
+		raft.Timer = time.NewTimer(time.Millisecond*200)
+	} else if raft.ServerId==1 {
+		raft.Timer = time.NewTimer(time.Millisecond*400)
+	} else if raft.ServerId==2 {
+		raft.Timer = time.NewTimer(time.Millisecond*550)
+	} else if raft.ServerId==3 {
+		raft.Timer = time.NewTimer(time.Millisecond*620)		
+	} else if raft.ServerId==4 {
+		raft.Timer = time.NewTimer(time.Millisecond*800)		
+	}
 	//waiting for the timer to expire on the channel
 	<-raft.Timer.C
+
+	fmt.Println("Timer expired for:",raft.ServerId)
 	//if at all timer did expired start election
 	raft.voteRequest()
 }

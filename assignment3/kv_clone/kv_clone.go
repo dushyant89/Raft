@@ -8,11 +8,11 @@ import (
     "time"
     "sync"
     "log"
-    "github.com/_dushyant/cs733/assignment2/raft"
+    "github.com/_dushyant/cs733/assignment3/raft"
     "encoding/json"
     "io/ioutil"
     "os"
-    //"fmt"
+    "fmt"
 )
 
 //details of the leader hardcoded for time being
@@ -56,61 +56,84 @@ type Memcache struct {
 
 func (t *Temp) AcceptLogEntry(logentry *raft.LogEntity, reply *bool) error {      
       mutex.Lock()
-        //appending the log entry to followers log
-          if logentry!=nil {
-                raft_obj.Log = append(raft_obj.Log,*logentry)
-            } else {
-                //this is a case of heartbeat sent by the leader
-                //change the votedFor value
-                //reset the timer also
-                if raft_obj.VotedFor > -1 {
-                    raft_obj.VotedFor=-1
-                }
-                raft_obj.Timer=
-            }
         
+        if raft_obj.State==Candidate {
+            //convert to follower
+            raft_obj.State=Follower
+        } 
+        
+        //reset the timer for the follower
+        raft_obj.Timer.Reset(time.Millisecond*200)
+
+        //appending the log entry to followers log
+        if len(logentry.Data)!=0 {
+              raft_obj.Log = append(raft_obj.Log,*logentry)
+          } else {
+              //this is a case of heartbeat sent by the leader
+              //change the votedFor value
+              //reset the timer also
+              //updating the current term as well of the follower
+              raft_obj.CurrentTerm=logentry.Term
+
+              if raft_obj.VotedFor > -1 {
+                  raft_obj.VotedFor=-1
+              }
+          }
+      *reply = true
       mutex.Unlock()
 
-      *reply = true
       return nil
 }
 
-func (t *Temp) AcceptVoteRequest(request *raft.VoteRequestStruct, reply *bool) error {      
-      
-      if raft_obj.CurrentTerm > request.Term || raft_obj.VotedFor >-1 {
-          *reply=false
-      } else if raft_obj.VotedFor== -1 {
-          //check for the log matching property if the server has not voted yet
-          //1. check for the length of the log
-          //2. terms which the last entries of the log contain
-          lastIndexVoter:= len(raft_obj.Log)
-          lastIndexCandidate:=request.LastLongIndex
+func (t *Temp) AcceptVoteRequest(request *raft.VoteRequestStruct, reply *bool) error { 
 
-          if lastIndexVoter >0 && lastIndexCandidate>0 {
-              if raft_obj.log[lastIndexVoter-1].term > request.log[lastIndexCandidate].term {
-                  *reply=false
-              } else if raft_obj.log[lastIndexVoter-1].term == request.log[lastIndexCandidate].term  {
-                  if lastIndexVoter >lastIndexCandidate {
-                     *reply=false
+    fmt.Println("Received vote request from:",request.CandidateId)
+
+    if(raft_obj.State==Follower) {
+
+      mutex.Lock()
+        //reset the timer for the follower
+        raft_obj.Timer.Reset(time.Millisecond*200)      
+          
+          if raft_obj.CurrentTerm > request.Term || raft_obj.VotedFor >-1 {
+              *reply=false
+          } else if raft_obj.VotedFor== -1 {
+              //check for the log matching property if the server has not voted yet
+              //1. check for the length of the log
+              //2. terms which the last entries of the log contain
+              lastIndexVoter:= len(raft_obj.Log)
+              lastIndexCandidate:=request.LastLongIndex
+
+              if lastIndexVoter >0 && lastIndexCandidate>0 {
+                  if raft_obj.Log[lastIndexVoter-1].Term > request.Log[lastIndexCandidate].Term {
+                      *reply=false
+                  } else if raft_obj.Log[lastIndexVoter-1].Term == request.Log[lastIndexCandidate].Term  {
+                      if lastIndexVoter >lastIndexCandidate {
+                         *reply=false
+                      } else {
+                        *reply=true
+                      }
                   } else {
-                    *reply=true
-                  }
+                      *reply=true
+                    }
+              } else if lastIndexVoter >lastIndexCandidate {
+                *reply=false
               } else {
-                  *reply=true
-                }
-          } else if lastIndexVoter >lastIndexCandidate {
-            *reply=false
+                *reply=true
+              }
           } else {
-            *reply=true
+              *reply=false
           }
+          if(*reply) {
+              raft_obj.VotedFor=request.CandidateId
+          }
+        
+      mutex.Unlock()
+
       } else {
           *reply=false
       }
-
-      if(*reply) {
-          raft_obj.VotedFor=request.CandidateId
-      }
-
+      fmt.Print(" and the reply is:",*reply)
     return nil
 }
 
@@ -120,8 +143,6 @@ func main() {
 
     //fetching the serverId from the command line args
     serverId, err := strconv.Atoi(os.Args[1])
-
-    //fmt.Println(serverId)
 
     var cc raft.ClusterConfig
 
@@ -138,10 +159,12 @@ func main() {
     servers:= cc.Servers     //array containing the details of the servers to start at different ports
 
     //creating the new raft object here
-    raft_obj,_=raft.NewRaft(make([] raft.LogEntity),&cc,serverId,make(chan raft.LogEntity),Follower,-1)
+    raft_obj,_=raft.NewRaft(make([] raft.LogEntity,0),&cc,serverId,make(chan raft.LogEntity),Follower,-1)
+
+    fmt.Println("Created the raft object for:",raft_obj.ServerId)
 
     for _, value := range servers {
-      if(value.Id==serverId)  {
+      if value.Id == serverId  {
             wg.Add(1)
             go spawnServers(cc,value)
             defer wg.Done()
@@ -169,7 +192,7 @@ func listenForClients(cc raft.ClusterConfig,sc raft.ServerConfig,port string){
 
     l, err:= net.Listen(CONN_TYPE,sc.Host+":"+port)
 
-    //fmt.Println("Listening clients on:",sc.Host+":"+port)
+    fmt.Println("Listening clients on:",sc.Host+":"+port)
 
     if err != nil {
         log.Print("Error listening:", err.Error())
@@ -183,21 +206,21 @@ func listenForClients(cc raft.ClusterConfig,sc raft.ServerConfig,port string){
           if err != nil {
               log.Print("Error accepting Connection Requests: ", err.Error())
           }        
-          // Handle connections in a new goroutine for the leader
+          // Handle connections in a new goroutine only for the leader
           go handleRequest(conn)
         }
 }
 
 func listenForServers(sc raft.ServerConfig,port string) {
-    
+
     rpc.Register(cal)
 
     l, err:= net.Listen(CONN_TYPE,sc.Host+":"+port)
 
     //set the election timer for the server
-    raft.SetTimer()
+    go raft_obj.SetTimer()
 
-    //fmt.Println("Listening servers on:",sc.Host+":"+port)
+    fmt.Println("Listening servers on:",sc.Host+":"+port)
 
     if err != nil {
         log.Print("Error listening:", err.Error())

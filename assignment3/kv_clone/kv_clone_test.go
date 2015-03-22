@@ -5,7 +5,7 @@ import (
 	"net"
 	//"strings"
 	//"time"
-	//"fmt"
+	"fmt"
 )
 
 func TestMain(t *testing.T) {
@@ -81,7 +81,7 @@ func shootTestCase(t *testing.T, routineID int, testcases []TestCase) {
 
 func TestCase1(t *testing.T) {
 
-	//fmt.Println("Testcases batch 1")
+	fmt.Println("Testcases batch 1")
 	
 	n:=1
 
