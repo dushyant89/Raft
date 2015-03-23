@@ -49,8 +49,6 @@ func shootTestCase(t *testing.T, routineID int, testcases []TestCase) {
 		t.Errorf("Error Dialing to the server")
 	}
 	
-	defer conn.Close()
-
 	for _, c := range testcases {
 		
 		conn.Write([]byte(c.in))
@@ -74,7 +72,7 @@ func shootTestCase(t *testing.T, routineID int, testcases []TestCase) {
 			}
 		}
 	}
-
+	conn.Close()
 	wait_ch <- routineID
 	//fmt.Println("Completed testcase for:",routineID)
 }

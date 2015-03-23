@@ -55,7 +55,8 @@ type Memcache struct {
  type Temp struct{}
 
 func (t *Temp) AcceptLogEntry(logentry *raft.LogEntity, reply *bool) error {      
-      mutex.Lock()
+
+        fmt.Println("Received append rpc for",raft_obj.ServerId)
         
         if raft_obj.State==Candidate {
             //convert to follower
@@ -63,37 +64,58 @@ func (t *Temp) AcceptLogEntry(logentry *raft.LogEntity, reply *bool) error {
         } 
         
         //reset the timer for the follower
-        raft_obj.Timer.Reset(time.Millisecond*200)
+        if raft_obj.ServerId==0 {
+          raft_obj.ElectionTimer.Reset(time.Millisecond*500)
+        } else if raft_obj.ServerId==1 {
+          raft_obj.ElectionTimer.Reset(time.Millisecond*750)
+        } else if raft_obj.ServerId==2 {
+          raft_obj.ElectionTimer.Reset(time.Millisecond*1000)
+        } else if raft_obj.ServerId==3 {
+          raft_obj.ElectionTimer.Reset(time.Millisecond*1200)    
+        } else if raft_obj.ServerId==4 {
+          raft_obj.ElectionTimer.Reset(time.Millisecond*1400)    
+        }
 
         //appending the log entry to followers log
         if len(logentry.Data)!=0 {
               raft_obj.Log = append(raft_obj.Log,*logentry)
+              //here before appending make sure that the log matching property is followed
+              //that code will go here
           } else {
               //this is a case of heartbeat sent by the leader
               //change the votedFor value
               //reset the timer also
+              //updating the leaderId of the follower as well
               //updating the current term as well of the follower
               raft_obj.CurrentTerm=logentry.Term
 
               if raft_obj.VotedFor > -1 {
                   raft_obj.VotedFor=-1
               }
+              raft_obj.LeaderId=logentry.LeaderId
           }
       *reply = true
-      mutex.Unlock()
 
       return nil
 }
 
 func (t *Temp) AcceptVoteRequest(request *raft.VoteRequestStruct, reply *bool) error { 
 
-    fmt.Println("Received vote request from:",request.CandidateId)
-
     if(raft_obj.State==Follower) {
-
-      mutex.Lock()
         //reset the timer for the follower
-        raft_obj.Timer.Reset(time.Millisecond*200)      
+        if raft_obj.ServerId==0 {
+          raft_obj.ElectionTimer.Reset(time.Millisecond*200)
+        } else if raft_obj.ServerId==1 {
+          raft_obj.ElectionTimer.Reset(time.Millisecond*400)
+        } else if raft_obj.ServerId==2 {
+          raft_obj.ElectionTimer.Reset(time.Millisecond*550)
+        } else if raft_obj.ServerId==3 {
+          raft_obj.ElectionTimer.Reset(time.Millisecond*620)    
+        } else if raft_obj.ServerId==4 {
+          raft_obj.ElectionTimer.Reset(time.Millisecond*800)    
+        }
+        
+        fmt.Println("Timer is reset via vote request for:",raft_obj.ServerId)      
           
           if raft_obj.CurrentTerm > request.Term || raft_obj.VotedFor >-1 {
               *reply=false
@@ -127,13 +149,11 @@ func (t *Temp) AcceptVoteRequest(request *raft.VoteRequestStruct, reply *bool) e
           if(*reply) {
               raft_obj.VotedFor=request.CandidateId
           }
-        
-      mutex.Unlock()
 
       } else {
           *reply=false
       }
-      fmt.Print(" and the reply is:",*reply)
+      fmt.Println("and the reply is:",*reply)
     return nil
 }
 
@@ -203,6 +223,9 @@ func listenForClients(cc raft.ClusterConfig,sc raft.ServerConfig,port string){
     for {
           // Listen for an incoming connection.
           conn, err := l.Accept()
+          
+          defer conn.Close()
+
           if err != nil {
               log.Print("Error accepting Connection Requests: ", err.Error())
           }        
@@ -218,7 +241,7 @@ func listenForServers(sc raft.ServerConfig,port string) {
     l, err:= net.Listen(CONN_TYPE,sc.Host+":"+port)
 
     //set the election timer for the server
-    go raft_obj.SetTimer()
+    go raft_obj.SetElectionTimer()
 
     fmt.Println("Listening servers on:",sc.Host+":"+port)
 
@@ -388,7 +411,13 @@ func checkTimeStamp() {
 // Handles incoming requests from clients only
 func handleRequest(conn net.Conn) {
 
-  //fmt.Println("Handling connection for:",conn.RemoteAddr())
+  fmt.Println("Handling client requests for:",conn.RemoteAddr())
+
+  //if leader is handling the request, which most likely will be the case
+  //then disable heartbeats for a moment and resume after command is processed
+  if(raft_obj.State=="Leader") {
+      raft_obj.SetReset=false
+  }
   
   // Close the connection when you're done with it.
   defer conn.Close()
@@ -459,5 +488,7 @@ func handleRequest(conn net.Conn) {
       } else {
           break
       }
-    }  
+    }
+    raft_obj.SetReset=true
+    raft_obj.SetHeartbeatTimer()
 }
