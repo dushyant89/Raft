@@ -54,17 +54,8 @@ type Memcache struct {
  //temporary struct to make the rpc call to work, offcourse will think of something useful
  type Temp struct{}
 
-func (t *Temp) AcceptLogEntry(logentry *raft.LogEntity, reply *bool) error {      
-
-        fmt.Println("Received append rpc for",raft_obj.ServerId)
-        
-        if raft_obj.State==Candidate {
-            //convert to follower
-            raft_obj.State=Follower
-        } 
-        
-        //reset the timer for the follower
-        if raft_obj.ServerId==0 {
+func resetTimer(raft_obj *raft.Raft) {
+    if raft_obj.ServerId==0 {
           raft_obj.ElectionTimer.Reset(time.Millisecond*500)
         } else if raft_obj.ServerId==1 {
           raft_obj.ElectionTimer.Reset(time.Millisecond*750)
@@ -75,45 +66,81 @@ func (t *Temp) AcceptLogEntry(logentry *raft.LogEntity, reply *bool) error {
         } else if raft_obj.ServerId==4 {
           raft_obj.ElectionTimer.Reset(time.Millisecond*1400)    
         }
+}
+
+func (t *Temp) AcceptLogEntry(request *raft.AppendRPCRequest, response *raft.AppendRPCResponse) error {      
+
+        fmt.Println("Received append rpc for",raft_obj.ServerId)
+        
+        if raft_obj.State==Candidate {
+            //convert to follower
+            raft_obj.State=Follower
+        } 
+        
+        //reset the timer for the follower
+        resetTimer(raft_obj)
+        logIndex:=len(raft_obj.Log)-1
 
         //appending the log entry to followers log
-        if len(logentry.Data)!=0 {
-              raft_obj.Log = append(raft_obj.Log,*logentry)
-              //here before appending make sure that the log matching property is followed
-              //that code will go here
+        if len(request.Entry.Data)!=0 {
+              if(request.Term < raft_obj.CurrentTerm) {
+                //leader's term is less than follower's term
+                  response.Reply=false
+              } else if(logIndex < request.PrevLogIndex) {
+                //leader needs to send previous entries first to decide
+                  response.Reply=false
+                  response.NextIndex=logIndex
+              } else if(logIndex > request.PrevLogIndex) {
+                //follower has extra entries, it might be the ones which are not on the majority systems
+                  if(raft_obj.Log[request.PrevLogIndex].Term != request.PrevLogTerm) {
+                   //follower's log contains an entry at previous log index with an entry mismatch
+                     response.Reply=false 
+                     response.NextIndex=request.PrevLogIndex-1
+                  } else {
+                    //override the existing entry
+                    raft_obj.Log[request.PrevLogIndex]=request.Entry
+                    response.Reply=true
+                    response.NextIndex=request.PrevLogIndex+1
+                  }
+              } else if(logIndex == request.PrevLogIndex)  {
+                //length of the log is same, no issues
+                  if(raft_obj.Log[logIndex].Term != request.PrevLogTerm) {
+                   //follower's log contains an entry at previous log index with an entry mismatch
+                     response.Reply=false
+                     response.NextIndex=request.PrevLogIndex-1 
+                  } else {
+                    //an ideal scenario just append the entry
+                      raft_obj.Log=append(raft_obj.Log,request.Entry)
+                      response.Reply=true
+                      response.NextIndex=request.PrevLogIndex+1
+                      response.MatchIndex=response.NextIndex
+                  }
+              }
           } else {
               //this is a case of heartbeat sent by the leader
               //change the votedFor value
-              //reset the timer also
               //updating the leaderId of the follower as well
               //updating the current term as well of the follower
-              raft_obj.CurrentTerm=logentry.Term
-
+              //just an additional measure to make sure old heartbeats are not sent
+              if(raft_obj.CurrentTerm < request.Term) {  
+                  raft_obj.CurrentTerm=request.Term
+                  raft_obj.LeaderId=request.LeaderId
+              }  
+              
               if raft_obj.VotedFor > -1 {
-                  raft_obj.VotedFor=-1
+                    raft_obj.VotedFor=-1
               }
-              raft_obj.LeaderId=logentry.LeaderId
-          }
-      *reply = true
 
+          }
       return nil
 }
 
 func (t *Temp) AcceptVoteRequest(request *raft.VoteRequestStruct, reply *bool) error { 
 
     if(raft_obj.State==Follower) {
+
         //reset the timer for the follower
-        if raft_obj.ServerId==0 {
-          raft_obj.ElectionTimer.Reset(time.Millisecond*200)
-        } else if raft_obj.ServerId==1 {
-          raft_obj.ElectionTimer.Reset(time.Millisecond*400)
-        } else if raft_obj.ServerId==2 {
-          raft_obj.ElectionTimer.Reset(time.Millisecond*550)
-        } else if raft_obj.ServerId==3 {
-          raft_obj.ElectionTimer.Reset(time.Millisecond*620)    
-        } else if raft_obj.ServerId==4 {
-          raft_obj.ElectionTimer.Reset(time.Millisecond*800)    
-        }
+        resetTimer(raft_obj)
         
         fmt.Println("Timer is reset via vote request for:",raft_obj.ServerId)      
           
@@ -178,8 +205,16 @@ func main() {
 
     servers:= cc.Servers     //array containing the details of the servers to start at different ports
 
+    filePath:="log_"+strconv.Itoa(serverId)+".txt"  //file path for the persistent log
+
+    f, err := os.Create(filePath)
+
+    if(err!=nil) {
+        log.Fatal("Error creating log file:",err)
+    }
+
     //creating the new raft object here
-    raft_obj,_=raft.NewRaft(make([] raft.LogEntity,0),&cc,serverId,make(chan raft.LogEntity),Follower,-1)
+    raft_obj,_=raft.NewRaft(make([] raft.LogEntity,0),&cc,serverId,make(chan raft.LogEntity),Follower,-1,f)
 
     fmt.Println("Created the raft object for:",raft_obj.ServerId)
 
@@ -408,6 +443,12 @@ func checkTimeStamp() {
     }
 }
 
+
+/**
+ TODO
+  1. If the request is a get request so do not store 
+     any of those on the state machines 
+**/
 // Handles incoming requests from clients only
 func handleRequest(conn net.Conn) {
 
@@ -441,7 +482,7 @@ func handleRequest(conn net.Conn) {
 
       //waiting for the commit channel to send a value and then the leader can proceed
       //with unpacking the command from the client
-      <- raft_obj.CommitCh
+      logentry:= <- raft_obj.CommitCh
 
       //fmt.Println("Now proceeding with the command processing")
 
@@ -467,28 +508,29 @@ func handleRequest(conn net.Conn) {
       //the first element of the array will always be the command name
       var noReply bool= false
       
-      if(arrayOfCommands[0]=="set") {
-            set(conn,newArrayOfCommands[1:],&noReply)
+          if(arrayOfCommands[0]=="set") {
+                set(conn,newArrayOfCommands[1:],&noReply)
+                raft_obj.LastApplied=logentry.LogIndex
+            } else if(arrayOfCommands[0]=="cas") {
+                cas(conn,newArrayOfCommands[1:],&noReply)
+                raft_obj.LastApplied=logentry.LogIndex
+            } else if(arrayOfCommands[0]=="get") {
+                get(conn,newArrayOfCommands[1:])
+            } else if(arrayOfCommands[0]=="getm") {
+                getm(conn,newArrayOfCommands[1:]) 
+            } else if(arrayOfCommands[0]=="delete") {
+                deleteEntry(conn,newArrayOfCommands[1:]) 
+                raft_obj.LastApplied=logentry.LogIndex
+            } else {
+                conn.Write([]byte("ERRCMDERR\r\n"))
+            }
 
-        } else if(arrayOfCommands[0]=="cas") {
-            cas(conn,newArrayOfCommands[1:],&noReply)
-
-        } else if(arrayOfCommands[0]=="get") {
-            get(conn,newArrayOfCommands[1:])
-
-        } else if(arrayOfCommands[0]=="getm") {
-            getm(conn,newArrayOfCommands[1:]) 
-
-        } else if(arrayOfCommands[0]=="delete") {
-            deleteEntry(conn,newArrayOfCommands[1:]) 
-
-        } else {
-            conn.Write([]byte("ERRCMDERR\r\n"))
-        }
       } else {
-          break
+          break  //the infinite for loop
       }
+
     }
+
     raft_obj.SetReset=true
     raft_obj.SetHeartbeatTimer()
 }
