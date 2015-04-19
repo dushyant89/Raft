@@ -1,0 +1,35 @@
+{
+    "Path": "log.txt",
+    "Servers": [
+        {
+            "id": 0,
+            "host": "localhost",
+            "clientPort": 9000,
+            "logPort": 8000
+        },
+        {
+            "id": 1,
+            "host": "localhost",
+            "clientPort": 9001,
+            "logPort": 8001
+        },
+        {
+            "id": 2,
+            "host": "localhost",
+            "clientPort": 9002,
+            "logPort": 8002
+        },
+        {
+            "id": 3,
+            "host": "localhost",
+            "clientPort": 9003,
+            "logPort": 8003
+        },
+        {
+            "id": 4,
+            "host": "localhost",
+            "clientPort": 9004,
+            "logPort": 8004
+        }
+    ]
+}
