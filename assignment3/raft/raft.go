@@ -70,7 +70,7 @@ type Raft struct {
 	LeaderId int          		 //id of the current leader of the term	
 	VotedFor int                 //id of the server which received the vote in the current term
 	Log []LogEntity              //array containing the log entries
-	commitIndex int              //index of the highest log entry known to be committed
+	CommitIndex int              //index of the highest log entry known to be committed
 	LastApplied int              //index of the log entry which is applied to the KV store
 	nextIndex []int
 	matchIndex []int
@@ -106,10 +106,55 @@ type AppendRPCResponse struct {
 var ackCount =make (chan int)
 var voteCount =make (chan int)
 
-func (raft Raft) sendAppendRpc(value ServerConfig,logEntity LogEntity) {
-	//not to send the append entries rpc to the leader itself 
-	fmt.Println("Sending RPCs to:",value.Host+":"+strconv.Itoa(value.LogPort))
+func prepareAppendRPCRequest(raft *Raft,logEntity LogEntity) *AppendRPCRequest{
+	
+	var args *AppendRPCRequest
 
+	if len(logEntity.Data)>0 {
+		if len(raft.Log) >= 2 {	
+			args = &AppendRPCRequest {
+				raft.CurrentTerm,
+				raft.LeaderId,
+				len(raft.Log)-2,
+				raft.Log[len(raft.Log)-2].Term,
+				logEntity,
+				raft.CommitIndex,
+			}
+		} else {
+			args = &AppendRPCRequest {
+				raft.CurrentTerm,
+				raft.LeaderId,
+				len(raft.Log)-1,
+				raft.Log[len(raft.Log)-1].Term,
+				logEntity,
+				raft.CommitIndex,
+			}
+		}
+	} else {
+		args = &AppendRPCRequest {
+				raft.CurrentTerm,
+				raft.LeaderId,
+				0,
+				raft.CurrentTerm,
+				logEntity,
+				raft.CommitIndex,
+			}
+	}
+
+	return args
+}
+/**
+* TODO
+* Send entries after having a match as well, right now we
+* are stopping when we have a match
+*/
+func (raft *Raft) sendAppendRpc(value ServerConfig,logEntity LogEntity,args *AppendRPCRequest) {
+	//not to send the append entries rpc to the leader itself 
+	
+	if len(logEntity.Data) >0 {
+		fmt.Println("Sending RPCs to:",value.Host+":"+strconv.Itoa(value.LogPort))
+	}
+		
 	client, err := rpc.Dial("tcp", value.Host+":"+strconv.Itoa(value.LogPort))
 	
 	defer client.Close()
@@ -117,18 +162,7 @@ func (raft Raft) sendAppendRpc(value ServerConfig,logEntity LogEntity) {
 	if err != nil {
 		log.Print("Error Dialing :", err)
 	}
-	var args *AppendRPCRequest
-	
-	// Synchronous call
-	args = &AppendRPCRequest {
-		raft.CurrentTerm,
-		raft.LeaderId,
-		len(raft.Log)-2,
-		raft.Log[len(raft.Log)-2].Term,
-		logEntity,
-		raft.commitIndex,
-	}
-	 
+
 	//this reply is the ack from the followers receiving the append entries
 	var response AppendRPCResponse
 
@@ -138,17 +172,36 @@ func (raft Raft) sendAppendRpc(value ServerConfig,logEntity LogEntity) {
 		log.Print("Remote Method Invocation Error:Append RPC:", err)
 	}
 	
-	fmt.Println("RPC reply from:",value.Host+":"+strconv.Itoa(value.LogPort)+" is ",response.Reply)
-
+	if len(logEntity.Data) >0 {
+		fmt.Println("RPC reply from:",value.Host+":"+strconv.Itoa(value.LogPort)+" is ",response.Reply)
+	}	
 	if response.Reply {
 		 ackCount <- 1
+	} else {
+		//this is necessary since we do not want the rpc call to be blocking on the channel
+		//guess we need to retry the rpc untill we get positive results
+		//recursively calling the append rpc method
+		ackCount <- 0
 	}
+	
+	if response.NextIndex!=-1 {
+		raft.nextIndex[value.Id]=response.NextIndex
+	}	
+	if response.MatchIndex!=-1 {
+		raft.matchIndex[value.Id]=response.MatchIndex
+	}	
 }
 
+/*
+TODO:
+*Handling the reaction to nextIndex and matchIndex
+*Do we need to use channels for heartbeats to count the no of replies we have got ?
+*/
 //raft implementing the shared log interface
 func (raft *Raft) Append(data []byte) (LogEntity,error) {
+	
+	mutex.Lock()
 
-	fmt.Println("Ready to append the data")
 	var logEntity=LogEntity{
 					len(raft.Log),
 					raft.CurrentTerm,
@@ -156,41 +209,112 @@ func (raft *Raft) Append(data []byte) (LogEntity,error) {
 					false,
 					}
 
-	
 	if len(data) >0 {
 		//append the latest entry in the leader's log first
+		fmt.Println("Ready to append the data")
 		raft.Log=append(raft.Log,logEntity)
 	}
-		
+	
+	var args *AppendRPCRequest
+
+	args= prepareAppendRPCRequest(raft,logEntity)
+
 	cc := raft.Clusterconfig
 	count:=1 
-
+	done:=false
 	for _,value := range cc.Servers {
 		
-		//sending entries acc to nextIndex array
-		logEntity = raft.Log[raft.nextIndex[value.Id]]				
-
 		if value.Id != raft.ServerId {
-			go raft.sendAppendRpc(value,logEntity)
+			go raft.sendAppendRpc(value,logEntity,args)
 			count = count + <-ackCount
 		}
-		if count > len(cc.Servers)/2 && len(data) >0 { 
+		if count > len(cc.Servers)/2 && len(data) >0 && !done{ 
 			//the majority acks have been received (check only in case of append entries not heartbeats), proceed to process and commit
 			//mark the entry as committed since acks from majority have been received
-			
-			raft.commitIndex=logEntity.LogIndex
+			done=true
+			raft.CommitIndex=logEntity.LogIndex
 			logEntity.Committed=true
 
 			raft.File.WriteString(strconv.Itoa(logEntity.LogIndex)+" "+strconv.Itoa(logEntity.Term)+" "+strings.TrimSpace(strings.Replace(string(logEntity.Data),"\n"," ",-1))+" "+
-				" "+strconv.FormatBool(logEntity.Committed))
+		" "+strconv.FormatBool(logEntity.Committed))
+			
+			raft.File.WriteString("\t\r\n");
 
 			raft.CommitCh <- logEntity
-			
-			return logEntity,nil
+		}
+	}
+	mutex.Unlock()
+
+	return logEntity,nil
+}
+
+func (raft *Raft) synchronizeFollowersLog() {
+	
+	cc := raft.Clusterconfig
+
+	var args *AppendRPCRequest
+	var logEntity LogEntity
+	var majorityCheck int
+	var heartbeat bool=false
+
+	for _,value := range cc.Servers {
+		if value.Id != raft.ServerId {
+			//send entries only if the log is incomplete according to the information
+			if raft.matchIndex[value.Id] < (len(raft.Log)-1) {
+				fmt.Println(value.Id," ",raft.nextIndex[value.Id]," ",raft.matchIndex[value.Id]," ",len(raft.Log)-1)
+				logEntity=raft.Log[raft.matchIndex[value.Id]]
+				
+				majorityCheck=raft.matchIndex[value.Id]
+				
+				args = &AppendRPCRequest {
+					raft.CurrentTerm,
+					raft.LeaderId,
+					raft.nextIndex[value.Id]-1,
+					raft.Log[raft.nextIndex[value.Id]-1].Term,
+					logEntity,
+					raft.CommitIndex,
+				}
+				heartbeat=false
+			} else {
+					//use it just as a heartbeat
+					logEntity=LogEntity{
+						len(raft.Log),
+						raft.CurrentTerm,
+						make([] byte,0),
+						false,
+					}
+					args = &AppendRPCRequest {
+						raft.CurrentTerm,
+						raft.LeaderId,
+						0,
+						raft.CurrentTerm,
+						logEntity,
+						raft.CommitIndex,
+					}
+					heartbeat=true	
+			}
+
+			go raft.sendAppendRpc(value,logEntity,args)
+
+			if 1==<-ackCount && !heartbeat{
+				//now check whether the append of this entry lead to the majority
+				majorityCount:=0
+				for _,i:= range cc.Servers {
+					if i.Id !=raft.ServerId && i!=value && raft.matchIndex[i.Id] >majorityCheck {
+						majorityCount++
+					}
+				}
+				if majorityCount < len(cc.Servers)/2 && majorityCount+1 >len(cc.Servers)/2 {
+					raft.Log[raft.matchIndex[value.Id]].Committed=true
+										raft.File.WriteString(strconv.Itoa(logEntity.LogIndex)+" "+strconv.Itoa(logEntity.Term)+" "+strings.TrimSpace(strings.Replace(string(logEntity.Data),"\n"," ",-1))+" "+
+			" "+strconv.FormatBool(logEntity.Committed))
+				
+					raft.File.WriteString("\t\r\n");
+				} 
+			}
 		}
 	}
 
-	return logEntity,nil
 }
 
 func (raft *Raft) sendVoteRequestRpc(value ServerConfig) {
@@ -234,6 +358,10 @@ func (raft *Raft) sendVoteRequestRpc(value ServerConfig) {
 		fmt.Print("Received reply of vote request from:",value.Id)
 		fmt.Println(" for:",raft.ServerId)
 		voteCount <-1	
+	} else {
+		fmt.Print("Received reply of vote request from:",value.Id)
+		fmt.Println(" for:",raft.ServerId)
+		voteCount <-0
 	}
 }
 
@@ -256,7 +384,7 @@ func (raft *Raft) voteRequest() {
 				count= count + <-voteCount
 			}
 			if count > len(cc.Servers)/2  && raft.State!="Follower" {
-					fmt.Println("New leader is:",raft.ServerId)
+					fmt.Println("***************New leader is:",raft.ServerId,"*********************");
 					//majority votes have been received, declare itself as the leader and start sending the heartbeats
 					raft.State="Leader"
 					raft.LeaderId=raft.ServerId
@@ -315,15 +443,14 @@ followers will be flooded with rpcs
 func (raft *Raft) SetHeartbeatTimer() {
 	
 	//keep setting the timer unless the current server is the leader
-	for raft.ServerId==raft.LeaderId && raft.SetReset {
-
-		fmt.Println("Heartbeat is now set for the leader")
+	for raft.State=="Leader" && raft.SetReset {
 		raft.HeartbeatTimer = time.NewTimer(time.Millisecond*400)
 
 		<-raft.HeartbeatTimer.C
+		
 		fmt.Println("Time for heart beats baby, by:",raft.ServerId)
 
-		raft.Append(make([] byte,0))
+		raft.synchronizeFollowersLog()
 	}	
 }
 
@@ -335,6 +462,7 @@ func NewRaft(log []LogEntity,config *ClusterConfig,thisServerId int,commitCh cha
 	var raft Raft
 	raft.Clusterconfig=*config
 	raft.CommitCh=commitCh
+	raft.CommitIndex=-1
 	raft.ServerId=thisServerId
 	raft.Log=log
 	raft.State=state

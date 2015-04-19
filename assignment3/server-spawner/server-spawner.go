@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"time"
+	//"fmt"
 )
 
 var wg sync.WaitGroup
@@ -30,7 +32,9 @@ func main() {
 		cmd := exec.Command(path, "0")
 		cmd.Stdout = os.Stdout
 	    cmd.Stderr = os.Stderr
-		err := cmd.Run()
+	
+		err,_:=cmd.Run()
+		
 		handleErr(err)
 		
 		defer wg.Done()
