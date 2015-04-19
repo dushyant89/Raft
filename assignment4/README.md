@@ -1,4 +1,4 @@
-## Assignment 3- GO Implementation of RAFT's Leader Election, Log Replication and Safety Property <br/>
+## Assignment 4- GO Implementation of RAFT <br/>
 
 ### Description
 
