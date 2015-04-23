@@ -54,19 +54,6 @@ type Memcache struct {
  //temporary struct to make the rpc call to work, offcourse will think of something useful
  type Temp struct{}
 
-func resetTimer(raft_obj *raft.Raft) {
-    if raft_obj.ServerId==0 {
-          raft_obj.ElectionTimer.Reset(time.Millisecond*500)
-        } else if raft_obj.ServerId==1 {
-          raft_obj.ElectionTimer.Reset(time.Millisecond*750)
-        } else if raft_obj.ServerId==2 {
-          raft_obj.ElectionTimer.Reset(time.Millisecond*1000)
-        } else if raft_obj.ServerId==3 {
-          raft_obj.ElectionTimer.Reset(time.Millisecond*1200)    
-        } else if raft_obj.ServerId==4 {
-          raft_obj.ElectionTimer.Reset(time.Millisecond*1400)    
-        }
-}
 
 func checkCommitStatus(leaderCommit int) {
     
@@ -191,7 +178,7 @@ func (t *Temp) AcceptLogEntry(request *raft.AppendRPCRequest, response *raft.App
         } 
         
         //reset the timer for the follower
-        go resetTimer(raft_obj)
+        go raft_obj.ResetTimer()
         
         if request.LeaderCommit > raft_obj.CommitIndex {
             go checkCommitStatus(request.LeaderCommit)
@@ -278,7 +265,7 @@ func (t *Temp) AcceptVoteRequest(request *raft.VoteRequestStruct, reply *bool) e
     if(raft_obj.State==Follower) {
 
         //reset the timer for the follower
-        resetTimer(raft_obj)
+        raft_obj.ResetTimer()
         
         fmt.Println("Timer is reset via vote request for:",raft_obj.ServerId)      
           
@@ -370,9 +357,11 @@ func main() {
 func spawnServers(cc raft.ClusterConfig,sc raft.ServerConfig) {
 
     wg.Add(2)
+    
     // Listen for incoming connections from servers
     go listenForServers(sc,strconv.Itoa(sc.LogPort))
     defer wg.Done()
+
     // Listen for incoming connections from clients
     go listenForClients(cc,sc,strconv.Itoa(sc.ClientPort))
     defer wg.Done()
@@ -628,7 +617,6 @@ func processCommand(buf []byte,conn net.Conn,logIndex int){
  TODO
   1. If the request is a get request so do not store 
      any of those on the state machines 
-  2. Handle the error case   
 **/
 // Handles incoming requests from clients only
 func handleRequest(conn net.Conn) {
@@ -657,6 +645,7 @@ func handleRequest(conn net.Conn) {
           log.Print("Error reading:", err.Error())
         }
 
+        //If the request has arrived to a non-Leader server
         if raft_obj.State!="Leader" {
           conn.Write([]byte("ERRREDIRECT\r\n"+" "+raft_obj.Clusterconfig.Servers[raft_obj.LeaderId].Host+":"+
             strconv.Itoa(raft_obj.Clusterconfig.Servers[raft_obj.LeaderId].ClientPort)))
