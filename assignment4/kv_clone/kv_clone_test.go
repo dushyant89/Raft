@@ -95,7 +95,7 @@ func TestCase1(t *testing.T) {
 	}
 	fireTestCases(t,n,testcases)
 	
-	fmt.Println("Testcases batch 2")
+	/*fmt.Println("Testcases batch 2")
 	
 	n=10
 
@@ -109,7 +109,7 @@ func TestCase1(t *testing.T) {
 
 	//fmt.Println("Testcases batch 3")
 	
-	/*n=50
+	n=50
 
 	testcases = []TestCase {
 		/*{"delete raavi\r\n","ERRNOTFOUND\r\n",false},

@@ -145,8 +145,6 @@ func prepareAppendRPCRequest(raft *Raft,logEntity LogEntity) *AppendRPCRequest{
 }
 /**
 * TODO
-* Send entries after having a match as well, right now we
-* are stopping when we have a match
 */
 func (raft *Raft) sendAppendRpc(value ServerConfig,logEntity LogEntity,args *AppendRPCRequest) {
 	//not to send the append entries rpc to the leader itself 
@@ -194,7 +192,6 @@ func (raft *Raft) sendAppendRpc(value ServerConfig,logEntity LogEntity,args *App
 
 /*
 TODO:
-*Handling the reaction to nextIndex and matchIndex
 *Do we need to use channels for heartbeats to count the no of replies we have got ?
 */
 //raft implementing the shared log interface
@@ -406,6 +403,9 @@ func (raft *Raft) voteRequest() {
 			}
 		}				
 		raft.SetReset=true
+		
+		go raft.restrictLeadership()
+
 		raft.SetHeartbeatTimer()
 		
 	} else {
@@ -413,11 +413,27 @@ func (raft *Raft) voteRequest() {
 	}	
 }
 
-func (raft *Raft) SetElectionTimer() {
-	//n:= rand.Intn(15)
-	//n=n+15
-	//fmt.Println("Timer set for:",raft.ServerId)
+func (raft *Raft) restrictLeadership() {				
+  
+  for {
+         if raft.State=="Leader"{
+            
+            <- time.After(4 * time.Second)	
 
+            if raft.SetReset {
+            	raft.State="Follower"
+                raft.SetReset=false
+                raft.HeartbeatTimer.Stop()
+               
+               	break
+            }
+         }     
+      }  
+}
+
+func (raft *Raft) SetElectionTimer() {
+
+	//going the hardcoded way, rand doesn't seem to work as smoothly
 	if raft.ServerId==0 {
 		raft.ElectionTimer = time.NewTimer(time.Millisecond*500)
 	} else if raft.ServerId==1 {
@@ -429,13 +445,31 @@ func (raft *Raft) SetElectionTimer() {
 	} else if raft.ServerId==4 {
 		raft.ElectionTimer = time.NewTimer(time.Millisecond*1400)		
 	}
-	//waiting for the timer to expire on the channel
-	<-raft.ElectionTimer.C
 
-	fmt.Println("Timer expired for:",raft.ServerId)
-	//if at all timer did expired start election
-	raft.voteRequest()
+	for {
+		//waiting for the timer to expire on the channel
+		<-raft.ElectionTimer.C
+
+		fmt.Println("Timer expired for:",raft.ServerId)
+		//if at all timer did expired start election
+		raft.voteRequest()
+	}	
 }
+
+func (raft *Raft) ResetTimer() {
+    if raft.ServerId==0 {
+          raft.ElectionTimer.Reset(time.Millisecond*500)
+        } else if raft.ServerId==1 {
+          raft.ElectionTimer.Reset(time.Millisecond*750)
+        } else if raft.ServerId==2 {
+          raft.ElectionTimer.Reset(time.Millisecond*1000)
+        } else if raft.ServerId==3 {
+          raft.ElectionTimer.Reset(time.Millisecond*1200)    
+        } else if raft.ServerId==4 {
+          raft.ElectionTimer.Reset(time.Millisecond*1400)    
+        }
+}
+
 /**
 TODO - Firing of this timer has to be in line with the fact that when we have
 requests coming from the clients then this timer should be set accordingly otherwise
