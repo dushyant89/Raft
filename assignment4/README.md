@@ -12,7 +12,7 @@ The way RAFT handles problem of consensus is by way of electing a leader among c
 ### Checkout Project and Directory Structure
 
 For checkout use following command:
-<code>go get</code> github.com/dushyant89/cs733/assignment2
+<code>go get</code> github.com/dushyant89/cs733/assignment4
 
 Below is the directory structure for project:
 
